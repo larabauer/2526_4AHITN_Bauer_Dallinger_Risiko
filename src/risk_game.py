@@ -13,13 +13,14 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    screen.fill((40, 120, 40))  # Hintergrund
+    screen.fill((40, 120, 40))
 
     pygame.draw.rect(screen, (200, 200, 200), (100, 100, 150, 100))
     pygame.draw.rect(screen, (200, 200, 200), (300, 150, 150, 100))
     pygame.draw.rect(screen, (200, 200, 200), (500, 250, 150, 100))
 
     mouse_pos = pygame.mouse.get_pos()
+
 
     pygame.display.update()
 
