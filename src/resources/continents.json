@@ -1,0 +1,74 @@
+[
+  {
+    "oceania": [
+      "eastern_australia",
+      "western_australia",
+      "indonesia",
+      "new_guinea"
+    ],
+    "points": 2
+  },
+  {
+    "south america": [
+      "brazil",
+      "venezuela",
+      "peru",
+      "argentina"
+    ],
+    "points": 2
+  },
+  {
+    "north america": [
+      "alaska",
+      "northwest_territory",
+      "ontario",
+      "greenland",
+      "eastern_united_states",
+      "western_united_states",
+      "quebec",
+      "central_america",
+      "alberta"
+    ],
+    "points": 5
+  },
+  {
+    "europe": [
+      "iceland",
+      "great_britain",
+      "scandinavia",
+      "southern_europe",
+      "western_europe",
+      "northern_europe",
+      "ukraine"
+    ],
+    "points": 5
+  },
+  {
+    "africa": [
+      "madagascar",
+      "north_africa",
+      "egypt",
+      "east_africa",
+      "congo",
+      "south_africa"
+    ],
+    "points": 3
+  },
+  {
+    "asia": [
+      "japan",
+      "yakursk",
+      "kamchatka",
+      "siberia",
+      "ural",
+      "afghanistan",
+      "middle_east",
+      "india",
+      "siam",
+      "china",
+      "mongolia",
+      "irkutsk"
+    ],
+    "points": 7
+  }
+]
