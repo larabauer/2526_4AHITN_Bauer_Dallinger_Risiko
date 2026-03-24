@@ -51,6 +51,7 @@ class Territory:
         self.border_color = (30, 30, 30)
         self.owner        = None
         self.troops       = 1
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
 
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
