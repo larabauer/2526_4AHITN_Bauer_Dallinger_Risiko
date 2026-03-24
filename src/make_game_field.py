@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from svgpathtools import parse_path
 import initialCountries
 from player_select import PLAYER_COLORS
+from player import Player
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -173,6 +174,7 @@ class MapLoader:
 
 
 class Game:
+
     def __init__(self, num_players):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -184,6 +186,12 @@ class Game:
         self.player_colors = PLAYER_COLORS[:num_players]
         self.selected      = None
 
+        self.players = [
+            Player(f"Player {i + 1}", self.player_colors[i])
+            for i in range(num_players)
+        ]
+        print(self.players) # Print, um die player zu sehen
+
         self._assign_territories()
 
     def _assign_territories(self):
@@ -191,9 +199,15 @@ class Game:
         id_to_territory = {t.id: t for t in self.territories}
 
         for player_index, country_ids in enumerate(assignments):
+            player = self.players[player_index]
+
             for cid in country_ids:
                 if cid in id_to_territory:
-                    id_to_territory[cid].set_owner(player_index, self.player_colors)
+                    territory = id_to_territory[cid]
+
+                    territory.set_owner(player_index, self.player_colors)
+
+                    player.add_territory(territory)
 
     def handle_click(self, pos):
         for t in self.territories:
