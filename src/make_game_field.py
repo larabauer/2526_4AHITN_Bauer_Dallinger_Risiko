@@ -53,6 +53,7 @@ class Territory:
         self.owner        = None
         self.troops       = 1
 
+
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
         self.center = (
@@ -88,6 +89,8 @@ class Territory:
                               cy - shadow.get_height() // 2 + 1))
         screen.blit(text,   (cx - text.get_width() // 2,
                               cy - text.get_height() // 2))
+
+
 
 
 class MapLoader:
@@ -178,20 +181,22 @@ class Game:
 
     def __init__(self, num_players):
         pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption("Risk Map")
+
 
         self.font          = pygame.font.SysFont("Arial", 22, bold=True)
         self.territories   = MapLoader.load_territories()
         self.num_players   = num_players
         self.player_colors = PLAYER_COLORS[:num_players]
         self.selected      = None
+        self.show_menu     = False
 
         self.players = [
             Player(f"Player {i + 1}", self.player_colors[i])
             for i in range(num_players)
         ]
-        print(self.players) # Print, um die player zu sehen
+        print(self.players)
 
         self.turn_manager = TurnManager(self.players)
 
@@ -225,16 +230,20 @@ class Game:
             t.draw(self.screen, self.font)
 
         if self.selected:
-            name   = self.selected.id.replace("_", " ").title()
+            name = self.selected.id.replace("_", " ").title()
             shadow = self.font.render(name, True, (0, 0, 0))
-            text   = self.font.render(name, True, (255, 255, 255))
+            text = self.font.render(name, True, (255, 255, 255))
             self.screen.blit(shadow, (12, 12))
-            self.screen.blit(text,   (10, 10))
+            self.screen.blit(text, (10, 10))
+
+
+        if self.show_menu:
+            self.draw_menu()
 
         pygame.display.flip()
 
     def run(self):
-        clock   = pygame.time.Clock()
+        clock = pygame.time.Clock()
         running = True
 
         while running:
@@ -243,10 +252,32 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.show_menu = not self.show_menu
+
+
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    self.handle_click(pygame.mouse.get_pos())
+                    if not self.show_menu:
+                        self.handle_click(pygame.mouse.get_pos())
 
             self.draw()
 
         pygame.quit()
         sys.exit()
+
+
+    def draw_menu(self):
+
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+        self.screen.blit(overlay, (0, 0))
+
+        title = self.font.render("MENÜ", True, (255, 255, 255))
+        self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 100))
+
+        option = self.font.render("ESC = Zurück", True, (200, 200, 200))
+        self.screen.blit(option, (WIDTH // 2 - 100, HEIGHT // 2))
