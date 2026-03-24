@@ -23,18 +23,13 @@ def svg_to_screen(x, y):
     sy = (y + OFFSET_Y) * SCALE_Y
     return (sx, sy)
 
-# Nur die 42 Risiko-Territorien
 TERRITORY_IDS = initialCountries.get_countries_from_json()
 
-# Kontinentfarben
 CONTINENT_COLORS = {
-    #oceania
     "eastern_australia": (200, 100, 50),
     "western_australia": (200, 100, 50),
     "new_guinea":        (200, 100, 50),
     "indonesia":         (200, 100, 50),
-
-    # north america
     "alaska":            (100, 180, 100),
     "ontario":           (100, 180, 100),
     "northwest_territory":(100, 180, 100),
@@ -44,14 +39,10 @@ CONTINENT_COLORS = {
     "central_america":   (100, 180, 100),
     "alberta":           (100, 180, 100),
     "greenland":         (100, 180, 100),
-
-    # south america
     "venezuela":         (220, 180, 50),
     "brazil":            (220, 180, 50),
     "peru":              (220, 180, 50),
     "argentina":         (220, 180, 50),
-
-    # europe
     "iceland":           (150, 200, 220),
     "great_britain":     (150, 200, 220),
     "scandinavia":       (150, 200, 220),
@@ -59,16 +50,12 @@ CONTINENT_COLORS = {
     "western_europe":    (150, 200, 220),
     "southern_europe":   (150, 200, 220),
     "ukraine":           (150, 200, 220),
-
-    # africa
     "north_africa":      (220, 160, 80),
     "egypt":             (220, 160, 80),
     "east_africa":       (220, 160, 80),
     "congo":             (220, 160, 80),
     "south_africa":      (220, 160, 80),
     "madagascar":        (220, 160, 80),
-
-    # asia
     "ural":              (180, 120, 200),
     "siberia":           (180, 120, 200),
     "yakursk":           (180, 120, 200),
@@ -83,7 +70,6 @@ CONTINENT_COLORS = {
     "japan":             (180, 120, 200),
 }
 
-# SVG parsen – nur countries layer
 tree = ET.parse("risk_map.svg")
 root = tree.getroot()
 ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -115,11 +101,9 @@ for elem in root.iter("{http://www.w3.org/2000/svg}path"):
         continue
 
     territories.append({
-        "id":      tid,
-        "points":  points,
-        "color":   CONTINENT_COLORS.get(tid, (180, 180, 180)),
-        "glow":    0.0,
-        "glowing": False
+        "id":     tid,
+        "points": points,
+        "color":  CONTINENT_COLORS.get(tid, (180, 180, 180)),
     })
 
 print(f"Länder geladen: {len(territories)}")
@@ -139,53 +123,12 @@ def point_in_polygon(point, polygon):
         j = i
     return inside
 
-def blend_color(base, glow_color, t):
-    r = int(base[0] + (glow_color[0] - base[0]) * t)
-    g = int(base[1] + (glow_color[1] - base[1]) * t)
-    b = int(base[2] + (glow_color[2] - base[2]) * t)
-    return (max(0, min(255, r)),
-            max(0, min(255, g)),
-            max(0, min(255, b)))
-
-# def draw_glow(surface, points, color, t, layers=8):
-#     cx = sum(p[0] for p in points) / len(points)
-#     cy = sum(p[1] for p in points) / len(points)
-#
-#     for i in range(layers, 0, -1):
-#         alpha = int(80 * t * (i / layers))
-#         scale = 1 + i * 0.005
-#
-#         scaled = [
-#             (cx + (px - cx) * scale, cy + (py - cy) * scale)
-#             for px, py in points
-#         ]
-#         valid = [(x, y) for x, y in scaled
-#                  if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
-#
-#         if len(valid) < 3:
-#             continue
-#
-#         glow_surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-#         pygame.draw.polygon(
-#             glow_surf,
-#             (color[0], color[1], color[2], alpha),
-#             valid, 0
-#         )
-#         surface.blit(glow_surf, (0, 0))
-
 font = pygame.font.SysFont("Arial", 22, bold=True)
-clock = pygame.time.Clock()
-
-GLOW_COLOR = (255, 255, 150)
-GLOW_SPEED = 0.06
-GLOW_DECAY = 0.025
 
 selected = None
 running = True
 
 while running:
-    clock.tick(60)
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -194,49 +137,23 @@ while running:
             mouse = pygame.mouse.get_pos()
             for t in territories:
                 if point_in_polygon(mouse, t["points"]):
-                    t["glowing"] = True
-                    t["glow"] = 0.0
                     selected = t
                     print(f"Angeklickt: {t['id']}")
 
-    # # Glow updaten
-    # for t in territories:
-    #     if t["glowing"]:
-    #         t["glow"] = min(1.0, t["glow"] + GLOW_SPEED)
-    #         if t["glow"] >= 1.0:
-    #             t["glowing"] = False
-    #     else:
-    #         t["glow"] = max(0.0, t["glow"] - GLOW_DECAY)
-
     screen.fill((30, 100, 160))
 
-    # Länder zeichnen
     for t in territories:
         valid = [(x, y) for x, y in t["points"]
                  if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
         if len(valid) < 3:
             continue
 
-        color = blend_color(t["color"], GLOW_COLOR, t["glow"])
         try:
-            pygame.draw.polygon(screen, color, valid, 0)
+            pygame.draw.polygon(screen, t["color"], valid, 0)
             pygame.draw.polygon(screen, (30, 30, 30), valid, 1)
         except Exception:
             pass
 
-    # # Glow drüber
-    # for t in territories:
-    #     if t["glow"] > 0.01:
-    #         valid = [(x, y) for x, y in t["points"]
-    #                  if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
-    #         if len(valid) < 3:
-    #             continue
-    #         try:
-    #             draw_glow(screen, valid, GLOW_COLOR, t["glow"])
-    #         except Exception:
-    #             pass
-
-    # Name anzeigen
     if selected:
         name = selected["id"].replace("_", " ").title()
         shadow = font.render(name, True, (0, 0, 0))
