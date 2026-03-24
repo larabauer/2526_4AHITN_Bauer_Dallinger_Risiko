@@ -3,7 +3,7 @@ import sys
 import xml.etree.ElementTree as ET
 from svgpathtools import parse_path
 import initialCountries
-
+from player_select import PLAYER_COLORS
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -15,6 +15,7 @@ OFFSET_Y = -118.55507
 
 SCALE_X = WIDTH / SVG_WIDTH
 SCALE_Y = HEIGHT / SVG_HEIGHT
+
 
 def svg_to_screen(x, y):
     sx = (x + OFFSET_X) * SCALE_X
@@ -41,28 +42,50 @@ def point_in_polygon(point, polygon):
     return inside
 
 
-
 class Territory:
     def __init__(self, tid, points, color):
-        self.id = tid
-        self.points = points
-        self.color = color
+        self.id           = tid
+        self.points       = points
+        self.color        = color
+        self.border_color = (30, 30, 30)
+        self.owner        = None
+        self.troops       = 1
+
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        self.center = (
+            (min(xs) + max(xs)) / 2,
+            (min(ys) + max(ys)) / 2
+        )
+
+    def set_owner(self, player_index, player_colors):
+        self.owner        = player_index
+        self.border_color = player_colors[player_index]
 
     def contains(self, point):
         return point_in_polygon(point, self.points)
 
-    def draw(self, screen):
+    def draw(self, screen, font):
         valid = [(x, y) for x, y in self.points
                  if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
-
         if len(valid) < 3:
             return
 
         try:
             pygame.draw.polygon(screen, self.color, valid, 0)
-            pygame.draw.polygon(screen, (30, 30, 30), valid, 1)
+            pygame.draw.polygon(screen, self.border_color, valid, 3)
         except Exception:
             pass
+
+        num_color = self.border_color if self.owner is not None else (255, 255, 255)
+
+        cx, cy = self.center
+        shadow = font.render(str(self.troops), True, (0, 0, 0))
+        text   = font.render(str(self.troops), True, num_color)
+        screen.blit(shadow, (cx - shadow.get_width() // 2 + 1,
+                              cy - shadow.get_height() // 2 + 1))
+        screen.blit(text,   (cx - text.get_width() // 2,
+                              cy - text.get_height() // 2))
 
 
 class MapLoader:
@@ -149,17 +172,28 @@ class MapLoader:
         return territories
 
 
-
 class Game:
-    def __init__(self):
+    def __init__(self, num_players):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Risk Map")
 
-        self.font = pygame.font.SysFont("Arial", 22, bold=True)
+        self.font          = pygame.font.SysFont("Arial", 22, bold=True)
+        self.territories   = MapLoader.load_territories()
+        self.num_players   = num_players
+        self.player_colors = PLAYER_COLORS[:num_players]
+        self.selected      = None
 
-        self.territories = MapLoader.load_territories()
-        self.selected = None
+        self._assign_territories()
+
+    def _assign_territories(self):
+        assignments = initialCountries.initial_countries_for_players(self.num_players)
+        id_to_territory = {t.id: t for t in self.territories}
+
+        for player_index, country_ids in enumerate(assignments):
+            for cid in country_ids:
+                if cid in id_to_territory:
+                    id_to_territory[cid].set_owner(player_index, self.player_colors)
 
     def handle_click(self, pos):
         for t in self.territories:
@@ -171,29 +205,27 @@ class Game:
         self.screen.fill((30, 100, 160))
 
         for t in self.territories:
-            t.draw(self.screen)
+            t.draw(self.screen, self.font)
 
         if self.selected:
-            name = self.selected.id.replace("_", " ").title()
+            name   = self.selected.id.replace("_", " ").title()
             shadow = self.font.render(name, True, (0, 0, 0))
-            text = self.font.render(name, True, (255, 255, 255))
-
+            text   = self.font.render(name, True, (255, 255, 255))
             self.screen.blit(shadow, (12, 12))
-            self.screen.blit(text, (10, 10))
+            self.screen.blit(text,   (10, 10))
 
         pygame.display.flip()
 
     def run(self):
+        clock   = pygame.time.Clock()
         running = True
-
-        clock = pygame.time.Clock()
 
         while running:
             clock.tick(60)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(pygame.mouse.get_pos())
 
