@@ -180,6 +180,9 @@ class MapLoader:
 class Game:
 
     def __init__(self, num_players):
+        self.quit_rect = None
+        self.running = None
+        self.resume_rect = None
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption("Risk Map")
@@ -244,40 +247,58 @@ class Game:
 
     def run(self):
         clock = pygame.time.Clock()
-        running = True
+        self.running = True
 
-        while running:
+        while self.running:
             clock.tick(60)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
-
+                    self.running = False
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         self.show_menu = not self.show_menu
 
-
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if not self.show_menu:
-                        self.handle_click(pygame.mouse.get_pos())
+                    mouse_pos = pygame.mouse.get_pos()
+
+                    if self.show_menu:
+                        self.handle_menu_click(mouse_pos)
+                    else:
+                        self.handle_click(mouse_pos)
 
             self.draw()
 
         pygame.quit()
         sys.exit()
 
-
     def draw_menu(self):
-
         overlay = pygame.Surface((WIDTH, HEIGHT))
         overlay.set_alpha(180)
         overlay.fill((0, 0, 0))
         self.screen.blit(overlay, (0, 0))
 
         title = self.font.render("MENÜ", True, (255, 255, 255))
-        self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 100))
+        self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 150))
 
-        option = self.font.render("ESC = Zurück", True, (200, 200, 200))
-        self.screen.blit(option, (WIDTH // 2 - 100, HEIGHT // 2))
+
+        self.resume_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 40)
+        self.quit_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 40)
+
+        pygame.draw.rect(self.screen, (80, 80, 80), self.resume_rect)
+        pygame.draw.rect(self.screen, (120, 50, 50), self.quit_rect)
+
+        resume = self.font.render("Weiter", True, (255, 255, 255))
+        quit_game = self.font.render("Beenden", True, (255, 255, 255))
+
+        self.screen.blit(resume, (self.resume_rect.x + 40, self.resume_rect.y + 5))
+        self.screen.blit(quit_game, (self.quit_rect.x + 40, self.quit_rect.y + 5))
+
+    def handle_menu_click(self, pos):
+        if self.resume_rect.collidepoint(pos):
+            self.show_menu = False
+
+        if self.quit_rect.collidepoint(pos):
+            print("Spiel wird beendet...")
+            self.running = False
