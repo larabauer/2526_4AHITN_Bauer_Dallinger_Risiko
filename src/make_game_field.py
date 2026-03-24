@@ -51,7 +51,7 @@ class Territory:
         self.border_color = (30, 30, 30)
         self.owner        = None
         self.troops       = 1
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+
 
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
@@ -180,8 +180,9 @@ class Game:
 
     def __init__(self, num_players):
         pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption("Risk Map")
+
 
         self.font          = pygame.font.SysFont("Arial", 22, bold=True)
         self.territories   = MapLoader.load_territories()
