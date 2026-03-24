@@ -2,6 +2,7 @@ import pygame
 import sys
 import xml.etree.ElementTree as ET
 from svgpathtools import parse_path
+import initialCountries
 
 pygame.init()
 
@@ -23,26 +24,17 @@ def svg_to_screen(x, y):
     return (sx, sy)
 
 # Nur die 42 Risiko-Territorien
-TERRITORY_IDS = [
-    "eastern_australia", "indonesia", "alaska", "new_guinea",
-    "ontario", "northwest_territory", "venezuela", "madagascar",
-    "north_africa", "greenland", "iceland", "great_britain",
-    "scandinavia", "japan", "yakursk", "kamchatka", "siberia",
-    "ural", "afghanistan", "middle_east", "india", "siam",
-    "china", "mongolia", "irkutsk", "ukraine", "southern_europe",
-    "western_europe", "northern_europe", "egypt", "east_africa",
-    "congo", "south_africa", "brazil", "argentina",
-    "eastern_united_states", "western_united_states", "quebec",
-    "central_america", "peru", "western_australia", "alberta"
-]
+TERRITORY_IDS = initialCountries.get_countries_from_json()
 
 # Kontinentfarben
 CONTINENT_COLORS = {
+    #oceania
     "eastern_australia": (200, 100, 50),
     "western_australia": (200, 100, 50),
     "new_guinea":        (200, 100, 50),
     "indonesia":         (200, 100, 50),
 
+    # north america
     "alaska":            (100, 180, 100),
     "ontario":           (100, 180, 100),
     "northwest_territory":(100, 180, 100),
@@ -53,12 +45,13 @@ CONTINENT_COLORS = {
     "alberta":           (100, 180, 100),
     "greenland":         (100, 180, 100),
 
+    # south america
     "venezuela":         (220, 180, 50),
     "brazil":            (220, 180, 50),
     "peru":              (220, 180, 50),
     "argentina":         (220, 180, 50),
 
-
+    # europe
     "iceland":           (150, 200, 220),
     "great_britain":     (150, 200, 220),
     "scandinavia":       (150, 200, 220),
@@ -67,6 +60,7 @@ CONTINENT_COLORS = {
     "southern_europe":   (150, 200, 220),
     "ukraine":           (150, 200, 220),
 
+    # africa
     "north_africa":      (220, 160, 80),
     "egypt":             (220, 160, 80),
     "east_africa":       (220, 160, 80),
@@ -74,6 +68,7 @@ CONTINENT_COLORS = {
     "south_africa":      (220, 160, 80),
     "madagascar":        (220, 160, 80),
 
+    # asia
     "ural":              (180, 120, 200),
     "siberia":           (180, 120, 200),
     "yakursk":           (180, 120, 200),
@@ -152,31 +147,31 @@ def blend_color(base, glow_color, t):
             max(0, min(255, g)),
             max(0, min(255, b)))
 
-def draw_glow(surface, points, color, t, layers=8):
-    cx = sum(p[0] for p in points) / len(points)
-    cy = sum(p[1] for p in points) / len(points)
-
-    for i in range(layers, 0, -1):
-        alpha = int(80 * t * (i / layers))
-        scale = 1 + i * 0.005
-
-        scaled = [
-            (cx + (px - cx) * scale, cy + (py - cy) * scale)
-            for px, py in points
-        ]
-        valid = [(x, y) for x, y in scaled
-                 if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
-
-        if len(valid) < 3:
-            continue
-
-        glow_surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        pygame.draw.polygon(
-            glow_surf,
-            (color[0], color[1], color[2], alpha),
-            valid, 0
-        )
-        surface.blit(glow_surf, (0, 0))
+# def draw_glow(surface, points, color, t, layers=8):
+#     cx = sum(p[0] for p in points) / len(points)
+#     cy = sum(p[1] for p in points) / len(points)
+#
+#     for i in range(layers, 0, -1):
+#         alpha = int(80 * t * (i / layers))
+#         scale = 1 + i * 0.005
+#
+#         scaled = [
+#             (cx + (px - cx) * scale, cy + (py - cy) * scale)
+#             for px, py in points
+#         ]
+#         valid = [(x, y) for x, y in scaled
+#                  if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
+#
+#         if len(valid) < 3:
+#             continue
+#
+#         glow_surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+#         pygame.draw.polygon(
+#             glow_surf,
+#             (color[0], color[1], color[2], alpha),
+#             valid, 0
+#         )
+#         surface.blit(glow_surf, (0, 0))
 
 font = pygame.font.SysFont("Arial", 22, bold=True)
 clock = pygame.time.Clock()
@@ -204,14 +199,14 @@ while running:
                     selected = t
                     print(f"Angeklickt: {t['id']}")
 
-    # Glow updaten
-    for t in territories:
-        if t["glowing"]:
-            t["glow"] = min(1.0, t["glow"] + GLOW_SPEED)
-            if t["glow"] >= 1.0:
-                t["glowing"] = False
-        else:
-            t["glow"] = max(0.0, t["glow"] - GLOW_DECAY)
+    # # Glow updaten
+    # for t in territories:
+    #     if t["glowing"]:
+    #         t["glow"] = min(1.0, t["glow"] + GLOW_SPEED)
+    #         if t["glow"] >= 1.0:
+    #             t["glowing"] = False
+    #     else:
+    #         t["glow"] = max(0.0, t["glow"] - GLOW_DECAY)
 
     screen.fill((30, 100, 160))
 
@@ -229,17 +224,17 @@ while running:
         except Exception:
             pass
 
-    # Glow drüber
-    for t in territories:
-        if t["glow"] > 0.01:
-            valid = [(x, y) for x, y in t["points"]
-                     if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
-            if len(valid) < 3:
-                continue
-            try:
-                draw_glow(screen, valid, GLOW_COLOR, t["glow"])
-            except Exception:
-                pass
+    # # Glow drüber
+    # for t in territories:
+    #     if t["glow"] > 0.01:
+    #         valid = [(x, y) for x, y in t["points"]
+    #                  if -200 <= x <= WIDTH + 200 and -200 <= y <= HEIGHT + 200]
+    #         if len(valid) < 3:
+    #             continue
+    #         try:
+    #             draw_glow(screen, valid, GLOW_COLOR, t["glow"])
+    #         except Exception:
+    #             pass
 
     # Name anzeigen
     if selected:
