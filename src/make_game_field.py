@@ -5,6 +5,7 @@ from svgpathtools import parse_path
 import initialCountries
 from player_select import PLAYER_COLORS
 from player import Player
+from turn_manager import TurnManager
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -191,6 +192,8 @@ class Game:
             for i in range(num_players)
         ]
         print(self.players) # Print, um die player zu sehen
+
+        self.turn_manager = TurnManager(self.players)
 
         self._assign_territories()
 
