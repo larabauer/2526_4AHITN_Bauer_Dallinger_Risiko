@@ -53,7 +53,6 @@ class Territory:
         self.owner        = None
         self.troops       = 1
 
-
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
         self.center = (
@@ -89,8 +88,6 @@ class Territory:
                               cy - shadow.get_height() // 2 + 1))
         screen.blit(text,   (cx - text.get_width() // 2,
                               cy - text.get_height() // 2))
-
-
 
 
 class MapLoader:
@@ -180,23 +177,29 @@ class MapLoader:
 class Game:
 
     def __init__(self, num_players):
-        self.quit_rect = None
-        self.running = None
+        self.quit_rect   = None
+        self.running     = None
         self.resume_rect = None
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption("Risk Map")
 
+        self.font       = pygame.font.SysFont("Arial", 22, bold=True)
+        self.font_large = pygame.font.SysFont("Arial", 48, bold=True)
+        self.font_small = pygame.font.SysFont("Arial", 18)
 
-        self.font          = pygame.font.SysFont("Arial", 22, bold=True)
         self.territories   = MapLoader.load_territories()
         self.num_players   = num_players
         self.player_colors = PLAYER_COLORS[:num_players]
         self.selected      = None
         self.show_menu     = False
 
+        # Zeigt das "Spieler X ist dran"-Overlay am Zuganfang
+        self.show_turn_overlay = True
+        self.turn_overlay_continue_rect = None
+
         self.players = [
-            Player(f"Player {i + 1}", self.player_colors[i])
+            Player(f"Spieler {i + 1}", self.player_colors[i])
             for i in range(num_players)
         ]
         print(self.players)
@@ -204,6 +207,7 @@ class Game:
         self.turn_manager = TurnManager(self.players)
 
         self._assign_territories()
+        self._start_placement_phase()
 
     def _assign_territories(self):
         assignments = initialCountries.initial_countries_for_players(self.num_players)
@@ -211,20 +215,49 @@ class Game:
 
         for player_index, country_ids in enumerate(assignments):
             player = self.players[player_index]
-
             for cid in country_ids:
                 if cid in id_to_territory:
                     territory = id_to_territory[cid]
-
                     territory.set_owner(player_index, self.player_colors)
-
                     player.add_territory(territory)
 
+    def _start_placement_phase(self):
+        """Berechnet Verstärkungen für den aktuellen Spieler und zeigt Overlay."""
+        player = self.turn_manager.get_current_player()
+        player.calculate_reinforcements()
+        self.turn_manager.set_phase("placement")
+        self.show_turn_overlay = True
+
     def handle_click(self, pos):
-        for t in self.territories:
-            if t.contains(pos):
-                self.selected = t
-                print(f"Angeklickt: {t.id}")
+        """Klick auf Karte – je nach Phase unterschiedliche Logik."""
+        phase = self.turn_manager.phase
+        current_player = self.turn_manager.get_current_player()
+        current_index  = self.turn_manager.current_index
+
+        if phase == "placement":
+            for t in self.territories:
+                if t.contains(pos):
+                    # Nur eigene Länder dürfen Truppen bekommen
+                    if t.owner == current_index:
+                        if current_player.reinforcements > 0:
+                            t.troops += 1
+                            current_player.reinforcements -= 1
+                            print(f"+1 Truppe auf {t.id} | Noch zu setzen: {current_player.reinforcements}")
+
+                            # Alle Truppen platziert → nächster Spieler
+                            if current_player.reinforcements == 0:
+                                self._end_turn()
+                    else:
+                        print("Das ist nicht dein Land!")
+                    self.selected = t
+                    break
+
+    def _end_turn(self):
+        """Beendet den Zug und wechselt zum nächsten Spieler."""
+        self.turn_manager.next_player()
+        self._start_placement_phase()
+
+    # ── Zeichnen ──────────────────────────────────────────────────────────────
 
     def draw(self):
         self.screen.fill((30, 100, 160))
@@ -233,17 +266,129 @@ class Game:
             t.draw(self.screen, self.font)
 
         if self.selected:
-            name = self.selected.id.replace("_", " ").title()
+            name   = self.selected.id.replace("_", " ").title()
             shadow = self.font.render(name, True, (0, 0, 0))
-            text = self.font.render(name, True, (255, 255, 255))
+            text   = self.font.render(name, True, (255, 255, 255))
             self.screen.blit(shadow, (12, 12))
-            self.screen.blit(text, (10, 10))
+            self.screen.blit(text,   (10, 10))
 
+        # HUD: Truppen-Info oben rechts
+        if not self.show_turn_overlay and not self.show_menu:
+            self._draw_hud()
 
         if self.show_menu:
             self.draw_menu()
 
+        if self.show_turn_overlay:
+            self._draw_turn_overlay()
+
         pygame.display.flip()
+
+    def _draw_hud(self):
+        """Zeigt oben rechts: Aktueller Spieler + noch zu platzierende Truppen."""
+        player = self.turn_manager.get_current_player()
+        phase  = self.turn_manager.phase
+
+        panel_w, panel_h = 340, 90
+        panel_x = WIDTH - panel_w - 20
+        panel_y = 20
+
+        # Hintergrund
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 160))
+        self.screen.blit(panel, (panel_x, panel_y))
+
+        # Farbiger Streifen links
+        pygame.draw.rect(self.screen, player.color,
+                         (panel_x, panel_y, 8, panel_h))
+
+        # Spielername
+        name_surf = self.font.render(player.name, True, player.color)
+        self.screen.blit(name_surf, (panel_x + 18, panel_y + 10))
+
+        # Phase
+        phase_text = "Phase: Truppen setzen" if phase == "placement" else f"Phase: {phase}"
+        phase_surf = self.font_small.render(phase_text, True, (200, 200, 200))
+        self.screen.blit(phase_surf, (panel_x + 18, panel_y + 38))
+
+        # Verbleibende Truppen (groß)
+        remaining = player.reinforcements
+        troop_label = self.font_small.render("Noch zu setzen:", True, (200, 200, 200))
+        troop_num   = self.font_large.render(str(remaining), True, (255, 230, 80))
+        self.screen.blit(troop_label, (panel_x + 18, panel_y + 58))
+
+        # Zahl ganz rechts im Panel
+        self.screen.blit(troop_num,
+                         (panel_x + panel_w - troop_num.get_width() - 15,
+                          panel_y + panel_h // 2 - troop_num.get_height() // 2))
+
+    def _draw_turn_overlay(self):
+        """Vollbild-Overlay: 'Spieler X ist dran' mit Weiter-Button."""
+        player = self.turn_manager.get_current_player()
+
+        # Dunkler Hintergrund
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        # Farbige Karte in der Mitte
+        card_w, card_h = 500, 280
+        card_x = WIDTH  // 2 - card_w // 2
+        card_y = HEIGHT // 2 - card_h // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        card.fill((20, 20, 30, 240))
+        self.screen.blit(card, (card_x, card_y))
+
+        # Farbiger Rand oben
+        pygame.draw.rect(self.screen, player.color,
+                         (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, player.color,
+                         (card_x, card_y, card_w, card_h), 3)
+
+        # "DU BIST DRAN"
+        header = self.font_small.render("DU BIST DRAN", True, (180, 180, 180))
+        self.screen.blit(header,
+                         (card_x + card_w // 2 - header.get_width() // 2,
+                          card_y + 25))
+
+        # Spielername groß
+        name_surf = self.font_large.render(player.name, True, player.color)
+        self.screen.blit(name_surf,
+                         (card_x + card_w // 2 - name_surf.get_width() // 2,
+                          card_y + 60))
+
+        # Truppen-Info
+        reinf_text = f"Truppen zu setzen: {player.reinforcements}"
+        reinf_surf = self.font.render(reinf_text, True, (255, 230, 80))
+        self.screen.blit(reinf_surf,
+                         (card_x + card_w // 2 - reinf_surf.get_width() // 2,
+                          card_y + 140))
+
+        hint = self.font_small.render("Klicke auf deine Länder um Truppen zu setzen", True, (160, 160, 160))
+        self.screen.blit(hint,
+                         (card_x + card_w // 2 - hint.get_width() // 2,
+                          card_y + 180))
+
+        # Weiter-Button
+        btn_w, btn_h = 200, 45
+        btn_x = card_x + card_w // 2 - btn_w // 2
+        btn_y = card_y + card_h - btn_h - 20
+
+        self.turn_overlay_continue_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        mx, my = pygame.mouse.get_pos()
+        hover = self.turn_overlay_continue_rect.collidepoint(mx, my)
+        btn_color = tuple(min(255, c + 50) for c in player.color) if hover else player.color
+
+        pygame.draw.rect(self.screen, btn_color,
+                         self.turn_overlay_continue_rect, border_radius=8)
+        btn_txt = self.font.render("Los geht's!", True, (255, 255, 255))
+        self.screen.blit(btn_txt,
+                         (btn_x + btn_w // 2 - btn_txt.get_width() // 2,
+                          btn_y + btn_h // 2 - btn_txt.get_height() // 2))
+
+    # ── Event-Handling ────────────────────────────────────────────────────────
 
     def run(self):
         clock = pygame.time.Clock()
@@ -263,8 +408,15 @@ class Game:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = pygame.mouse.get_pos()
 
-                    if self.show_menu:
+                    if self.show_turn_overlay:
+                        # Nur Weiter-Button reagiert
+                        if (self.turn_overlay_continue_rect and
+                                self.turn_overlay_continue_rect.collidepoint(mouse_pos)):
+                            self.show_turn_overlay = False
+
+                    elif self.show_menu:
                         self.handle_menu_click(mouse_pos)
+
                     else:
                         self.handle_click(mouse_pos)
 
@@ -272,6 +424,8 @@ class Game:
 
         pygame.quit()
         sys.exit()
+
+    # ── Menü ──────────────────────────────────────────────────────────────────
 
     def draw_menu(self):
         overlay = pygame.Surface((WIDTH, HEIGHT))
@@ -282,23 +436,23 @@ class Game:
         title = self.font.render("MENÜ", True, (255, 255, 255))
         self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 150))
 
-
         self.resume_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 40)
-        self.quit_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 40)
+        self.quit_rect   = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 40)
 
-        pygame.draw.rect(self.screen, (80, 80, 80), self.resume_rect)
-        pygame.draw.rect(self.screen, (120, 50, 50), self.quit_rect)
+        pygame.draw.rect(self.screen, (80,  80,  80),  self.resume_rect)
+        pygame.draw.rect(self.screen, (120, 50,  50),  self.quit_rect)
 
-        resume = self.font.render("Weiter", True, (255, 255, 255))
-        quit_game = self.font.render("Beenden", True, (255, 255, 255))
+        resume    = self.font.render("Weiter",   True, (255, 255, 255))
+        quit_game = self.font.render("Beenden",  True, (255, 255, 255))
 
-        self.screen.blit(resume, (self.resume_rect.x + 40, self.resume_rect.y + 5))
-        self.screen.blit(quit_game, (self.quit_rect.x + 40, self.quit_rect.y + 5))
+        self.screen.blit(resume,
+                         (self.resume_rect.x + 40, self.resume_rect.y + 5))
+        self.screen.blit(quit_game,
+                         (self.quit_rect.x  + 40, self.quit_rect.y  + 5))
 
     def handle_menu_click(self, pos):
         if self.resume_rect.collidepoint(pos):
             self.show_menu = False
-
         if self.quit_rect.collidepoint(pos):
             print("Spiel wird beendet...")
             self.running = False

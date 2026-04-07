@@ -13,7 +13,7 @@ class Player:
 
     def add_territory(self, territory):
         self.territories.append(territory)
-        territory.owner = self
+
 
     def remove_territory(self, territory):
         if territory in self.territories:
