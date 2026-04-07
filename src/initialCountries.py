@@ -2,11 +2,20 @@ import json
 import random
 
 
-
 def get_countries_from_json():
-    with open("resources/countries.json", "r", encoding="utf-8") as file:
+    with open("resources/continents.json", "r", encoding="utf-8") as file:
         data = json.load(file)
-    return data
+
+    countries = [
+        country
+        for continent in data
+        for key, value in continent.items()
+        if key != "points"
+        for country in value
+    ]
+
+    print("Länder geladen:", countries)
+    return countries
 
 def initial_num_countries_for_players(players: int, num_countries: int):
     base = num_countries // players
@@ -25,10 +34,9 @@ def initial_num_countries_for_players(players: int, num_countries: int):
 
 def initial_countries_for_players(players: int):
     countries = get_countries_from_json()
-    num_countries = len(countries)
     random.shuffle(countries)
 
-    player_nums = initial_num_countries_for_players(players, num_countries)
+    player_nums = initial_num_countries_for_players(players, len(countries))
 
     result = []
     index = 0
