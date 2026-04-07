@@ -1,5 +1,6 @@
 import pygame
 import sys
+import json
 import xml.etree.ElementTree as ET
 from svgpathtools import parse_path
 import initialCountries
@@ -204,6 +205,9 @@ class Game:
         ]
         print(self.players)
 
+        with open("resources/continents.json", "r", encoding="utf-8") as f:
+            self.continents_data = json.load(f)
+
         self.turn_manager = TurnManager(self.players)
 
         self._assign_territories()
@@ -224,7 +228,7 @@ class Game:
     def _start_placement_phase(self):
         """Berechnet Verstärkungen für den aktuellen Spieler und zeigt Overlay."""
         player = self.turn_manager.get_current_player()
-        player.calculate_reinforcements()
+        player.calculate_reinforcements(self.continents_data)
         self.turn_manager.set_phase("placement")
         self.show_turn_overlay = True
 

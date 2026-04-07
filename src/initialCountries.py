@@ -31,6 +31,23 @@ def initial_num_countries_for_players(players: int, num_countries: int):
 
     return result
 
+def calculate_continent_bonus(player, continents_data):
+    bonus = 0
+
+    player_territory_ids = [t.id for t in player.territories]
+
+    for continent in continents_data:
+        for key, value in continent.items():
+            if key == "points":
+                continue
+
+            continent_countries = value
+            continent_points = continent["points"]
+
+            if all(country in player_territory_ids for country in continent_countries):
+                bonus += continent_points
+
+    return bonus
 
 def initial_countries_for_players(players: int):
     countries = get_countries_from_json()

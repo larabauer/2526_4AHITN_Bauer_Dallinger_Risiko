@@ -1,3 +1,5 @@
+from initialCountries import calculate_continent_bonus
+
 class Player:
     def __init__(self, name, color):
         self.name = name
@@ -20,8 +22,13 @@ class Player:
             self.territories.remove(territory)
             territory.owner = None
 
-    def calculate_reinforcements(self):
-        self.reinforcements = max(3, len(self.territories) // 3) + self.additional_forces
+    def calculate_reinforcements(self, continents_data):
+        base = max(3, len(self.territories) // 3)
+
+
+        self.additional_forces = calculate_continent_bonus(self, continents_data)
+
+        self.reinforcements = base + self.additional_forces
 
     def __str__(self):
         return "Player: " + self.name + " " + str(self.color)
