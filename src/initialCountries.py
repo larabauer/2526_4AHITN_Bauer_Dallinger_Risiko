@@ -1,16 +1,16 @@
 import json
 import random
 
-NUM_COUNTRIES = 42
+
 
 def get_countries_from_json():
     with open("resources/countries.json", "r", encoding="utf-8") as file:
         data = json.load(file)
     return data
 
-def initial_num_countries_for_players(players: int):
-    base = NUM_COUNTRIES // players
-    remainder = NUM_COUNTRIES % players
+def initial_num_countries_for_players(players: int, num_countries: int):
+    base = num_countries // players
+    remainder = num_countries % players
 
     result = []
 
@@ -25,9 +25,10 @@ def initial_num_countries_for_players(players: int):
 
 def initial_countries_for_players(players: int):
     countries = get_countries_from_json()
+    num_countries = len(countries)
     random.shuffle(countries)
 
-    player_nums = initial_num_countries_for_players(players)
+    player_nums = initial_num_countries_for_players(players, num_countries)
 
     result = []
     index = 0
