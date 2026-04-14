@@ -3,7 +3,7 @@ class TurnManager:
         self.players = players
         self.current_index = 0
 
-        # Phasen: placement → attack → move (später erweiterbar)
+        # Phasen: placement → attack → move
         self.phase = "placement"
 
     def get_current_player(self):

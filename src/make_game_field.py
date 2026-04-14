@@ -47,12 +47,12 @@ def point_in_polygon(point, polygon):
 
 class Territory:
     def __init__(self, tid, points, color):
-        self.id           = tid
-        self.points       = points
-        self.color        = color
+        self.id = tid
+        self.points = points
+        self.color = color
         self.border_color = (30, 30, 30)
-        self.owner        = None
-        self.troops       = 1
+        self.owner = None
+        self.troops = 1
 
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
@@ -62,7 +62,7 @@ class Territory:
         )
 
     def set_owner(self, player_index, player_colors):
-        self.owner        = player_index
+        self.owner = player_index
         self.border_color = player_colors[player_index]
 
     def contains(self, point):
@@ -84,57 +84,57 @@ class Territory:
 
         cx, cy = self.center
         shadow = font.render(str(self.troops), True, (0, 0, 0))
-        text   = font.render(str(self.troops), True, num_color)
+        text = font.render(str(self.troops), True, num_color)
         screen.blit(shadow, (cx - shadow.get_width() // 2 + 1,
-                              cy - shadow.get_height() // 2 + 1))
-        screen.blit(text,   (cx - text.get_width() // 2,
-                              cy - text.get_height() // 2))
+                             cy - shadow.get_height() // 2 + 1))
+        screen.blit(text, (cx - text.get_width() // 2,
+                           cy - text.get_height() // 2))
 
 
 class MapLoader:
     CONTINENT_COLORS = {
         "eastern_australia": (200, 100, 50),
         "western_australia": (200, 100, 50),
-        "new_guinea":        (200, 100, 50),
-        "indonesia":         (200, 100, 50),
-        "alaska":            (100, 180, 100),
-        "ontario":           (100, 180, 100),
-        "northwest_territory":(100, 180, 100),
-        "quebec":            (100, 180, 100),
-        "eastern_united_states":(100, 180, 100),
-        "western_united_states":(100, 180, 100),
-        "central_america":   (100, 180, 100),
-        "alberta":           (100, 180, 100),
-        "greenland":         (100, 180, 100),
-        "venezuela":         (220, 180, 50),
-        "brazil":            (220, 180, 50),
-        "peru":              (220, 180, 50),
-        "argentina":         (220, 180, 50),
-        "iceland":           (150, 200, 220),
-        "great_britain":     (150, 200, 220),
-        "scandinavia":       (150, 200, 220),
-        "northern_europe":   (150, 200, 220),
-        "western_europe":    (150, 200, 220),
-        "southern_europe":   (150, 200, 220),
-        "ukraine":           (150, 200, 220),
-        "north_africa":      (220, 160, 80),
-        "egypt":             (220, 160, 80),
-        "east_africa":       (220, 160, 80),
-        "congo":             (220, 160, 80),
-        "south_africa":      (220, 160, 80),
-        "madagascar":        (220, 160, 80),
-        "ural":              (180, 120, 200),
-        "siberia":           (180, 120, 200),
-        "yakursk":           (180, 120, 200),
-        "kamchatka":         (180, 120, 200),
-        "irkutsk":           (180, 120, 200),
-        "mongolia":          (180, 120, 200),
-        "china":             (180, 120, 200),
-        "afghanistan":       (180, 120, 200),
-        "middle_east":       (180, 120, 200),
-        "india":             (180, 120, 200),
-        "siam":              (180, 120, 200),
-        "japan":             (180, 120, 200),
+        "new_guinea": (200, 100, 50),
+        "indonesia": (200, 100, 50),
+        "alaska": (100, 180, 100),
+        "ontario": (100, 180, 100),
+        "northwest_territory": (100, 180, 100),
+        "quebec": (100, 180, 100),
+        "eastern_united_states": (100, 180, 100),
+        "western_united_states": (100, 180, 100),
+        "central_america": (100, 180, 100),
+        "alberta": (100, 180, 100),
+        "greenland": (100, 180, 100),
+        "venezuela": (220, 180, 50),
+        "brazil": (220, 180, 50),
+        "peru": (220, 180, 50),
+        "argentina": (220, 180, 50),
+        "iceland": (150, 200, 220),
+        "great_britain": (150, 200, 220),
+        "scandinavia": (150, 200, 220),
+        "northern_europe": (150, 200, 220),
+        "western_europe": (150, 200, 220),
+        "southern_europe": (150, 200, 220),
+        "ukraine": (150, 200, 220),
+        "north_africa": (220, 160, 80),
+        "egypt": (220, 160, 80),
+        "east_africa": (220, 160, 80),
+        "congo": (220, 160, 80),
+        "south_africa": (220, 160, 80),
+        "madagascar": (220, 160, 80),
+        "ural": (180, 120, 200),
+        "siberia": (180, 120, 200),
+        "yakursk": (180, 120, 200),
+        "kamchatka": (180, 120, 200),
+        "irkutsk": (180, 120, 200),
+        "mongolia": (180, 120, 200),
+        "china": (180, 120, 200),
+        "afghanistan": (180, 120, 200),
+        "middle_east": (180, 120, 200),
+        "india": (180, 120, 200),
+        "siam": (180, 120, 200),
+        "japan": (180, 120, 200),
     }
 
     @staticmethod
@@ -178,22 +178,22 @@ class MapLoader:
 class Game:
 
     def __init__(self, num_players):
-        self.quit_rect   = None
-        self.running     = None
+        self.quit_rect = None
+        self.running = None
         self.resume_rect = None
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption("Risk Map")
 
-        self.font       = pygame.font.SysFont("Arial", 22, bold=True)
+        self.font = pygame.font.SysFont("Arial", 22, bold=True)
         self.font_large = pygame.font.SysFont("Arial", 48, bold=True)
         self.font_small = pygame.font.SysFont("Arial", 18)
 
-        self.territories   = MapLoader.load_territories()
-        self.num_players   = num_players
+        self.territories = MapLoader.load_territories()
+        self.num_players = num_players
         self.player_colors = PLAYER_COLORS[:num_players]
-        self.selected      = None
-        self.show_menu     = False
+        self.selected = None
+        self.show_menu = False
 
         # Zeigt das "Spieler X ist dran"-Overlay am Zuganfang
         self.show_turn_overlay = True
@@ -231,12 +231,19 @@ class Game:
         player.calculate_reinforcements(self.continents_data)
         self.turn_manager.set_phase("placement")
         self.show_turn_overlay = True
+        self._start_attack_phase()
+
+    def _start_attack_phase(self):
+        """Angriffslogik"""
+        player = self.turn_manager.get_current_player()
+        self.turn_manager.set_phase("attack")
+
 
     def handle_click(self, pos):
         """Klick auf Karte – je nach Phase unterschiedliche Logik."""
         phase = self.turn_manager.phase
         current_player = self.turn_manager.get_current_player()
-        current_index  = self.turn_manager.current_index
+        current_index = self.turn_manager.current_index
 
         if phase == "placement":
             for t in self.territories:
@@ -255,6 +262,19 @@ class Game:
                         print("Das ist nicht dein Land!")
                     self.selected = t
                     break
+        elif phase == "attack":
+            for t in self.territories:
+                if t.contains(pos):
+                    if t.owner != current_index:
+                        # Auswahl: mit wie vielen Truppen möchtest du angreifen
+                        # Fenster zum Würfeln (KLick zum würfeln, Dann Ergebniss vom Gegener anzeigen)
+                        # Ergebnis auswerten -> welcher spieler verliert wie viele Truppen?
+                        # Frage: Willst du den Kampf weiter führen?
+                        # -> Ergebnis auswerten
+                        #
+                        # attack logik
+                        break
+
 
     def _end_turn(self):
         """Beendet den Zug und wechselt zum nächsten Spieler."""
@@ -270,11 +290,11 @@ class Game:
             t.draw(self.screen, self.font)
 
         if self.selected:
-            name   = self.selected.id.replace("_", " ").title()
+            name = self.selected.id.replace("_", " ").title()
             shadow = self.font.render(name, True, (0, 0, 0))
-            text   = self.font.render(name, True, (255, 255, 255))
+            text = self.font.render(name, True, (255, 255, 255))
             self.screen.blit(shadow, (12, 12))
-            self.screen.blit(text,   (10, 10))
+            self.screen.blit(text, (10, 10))
 
         # HUD: Truppen-Info oben rechts
         if not self.show_turn_overlay and not self.show_menu:
@@ -291,7 +311,7 @@ class Game:
     def _draw_hud(self):
         """Zeigt oben rechts: Aktueller Spieler + noch zu platzierende Truppen."""
         player = self.turn_manager.get_current_player()
-        phase  = self.turn_manager.phase
+        phase = self.turn_manager.phase
 
         panel_w, panel_h = 340, 90
         panel_x = WIDTH - panel_w - 20
@@ -318,7 +338,7 @@ class Game:
         # Verbleibende Truppen (groß)
         remaining = player.reinforcements
         troop_label = self.font_small.render("Noch zu setzen:", True, (200, 200, 200))
-        troop_num   = self.font_large.render(str(remaining), True, (255, 230, 80))
+        troop_num = self.font_large.render(str(remaining), True, (255, 230, 80))
         self.screen.blit(troop_label, (panel_x + 18, panel_y + 58))
 
         # Zahl ganz rechts im Panel
@@ -337,7 +357,7 @@ class Game:
 
         # Farbige Karte in der Mitte
         card_w, card_h = 500, 280
-        card_x = WIDTH  // 2 - card_w // 2
+        card_x = WIDTH // 2 - card_w // 2
         card_y = HEIGHT // 2 - card_h // 2
 
         card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
@@ -441,18 +461,18 @@ class Game:
         self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 150))
 
         self.resume_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 40)
-        self.quit_rect   = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 40)
+        self.quit_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 40, 200, 40)
 
-        pygame.draw.rect(self.screen, (80,  80,  80),  self.resume_rect)
-        pygame.draw.rect(self.screen, (120, 50,  50),  self.quit_rect)
+        pygame.draw.rect(self.screen, (80, 80, 80), self.resume_rect)
+        pygame.draw.rect(self.screen, (120, 50, 50), self.quit_rect)
 
-        resume    = self.font.render("Weiter",   True, (255, 255, 255))
-        quit_game = self.font.render("Beenden",  True, (255, 255, 255))
+        resume = self.font.render("Weiter", True, (255, 255, 255))
+        quit_game = self.font.render("Beenden", True, (255, 255, 255))
 
         self.screen.blit(resume,
                          (self.resume_rect.x + 40, self.resume_rect.y + 5))
         self.screen.blit(quit_game,
-                         (self.quit_rect.x  + 40, self.quit_rect.y  + 5))
+                         (self.quit_rect.x + 40, self.quit_rect.y + 5))
 
     def handle_menu_click(self, pos):
         if self.resume_rect.collidepoint(pos):
