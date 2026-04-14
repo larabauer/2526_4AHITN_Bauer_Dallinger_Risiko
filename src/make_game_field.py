@@ -7,6 +7,7 @@ import initialCountries
 from player_select import PLAYER_COLORS
 from player import Player
 from turn_manager import TurnManager
+from combat import Combat
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -231,7 +232,6 @@ class Game:
         player.calculate_reinforcements(self.continents_data)
         self.turn_manager.set_phase("placement")
         self.show_turn_overlay = True
-        self._start_attack_phase()
 
     def _start_attack_phase(self):
         """Angriffslogik"""
@@ -257,6 +257,7 @@ class Game:
 
                             # Alle Truppen platziert → nächster Spieler
                             if current_player.reinforcements == 0:
+                                self._start_attack_phase()
                                 self._end_turn()
                     else:
                         print("Das ist nicht dein Land!")
