@@ -1,6 +1,5 @@
 import random
 
-
 class Combat:
     MAX_ATTACKER_DICE = 3
     MAX_DEFENDER_DICE = 2
