@@ -22,13 +22,26 @@ class Player:
             self.territories.remove(territory)
             territory.owner = None
 
-    def calculate_reinforcements(self, continents_data):
-        base = max(3, len(self.territories) // 3)
+    def calculate_reinforcements(self, map_data):
+        territory_bonus = max(3, len(self.territories) // 3)
+        continent_bonus = 0
 
+        player_territory_names = [t.name for t in self.territories]
 
-        self.additional_forces = calculate_continent_bonus(self, continents_data)
+        for continent in map_data["continents"]:
+            continent_name = continent["name"]
+            continent_points = continent["points"]
 
-        self.reinforcements = base + self.additional_forces
+            continent_countries = [
+                country["name"]
+                for country in map_data["countries"]
+                if country["continent"] == continent_name
+            ]
+
+            if all(country_name in player_territory_names for country_name in continent_countries):
+                continent_bonus += continent_points
+
+        self.reinforcements = territory_bonus + continent_bonus
 
     def __str__(self):
         return "Player: " + self.name + " " + str(self.color)
