@@ -3,7 +3,7 @@ import random
 
 class Combat:
     MAX_ATTACKER_DICE = 3
-    MAX_DEFENDER_DICE = 2
+    MAX_DEFENDER_DICE = 3
 
     def __init__(self, attacking_territory, defending_territory, players: list):
         self.attacking_territory = attacking_territory

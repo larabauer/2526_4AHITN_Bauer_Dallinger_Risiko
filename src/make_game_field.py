@@ -214,6 +214,10 @@ class Game:
         self._assign_territories()
         self._start_placement_phase()
 
+        #for attack
+        self.selected_attacker = None
+        self.active_combat: Combat | None = None
+
     def _assign_territories(self):
         assignments = initialCountries.initial_countries_for_players(self.num_players)
         id_to_territory = {t.id: t for t in self.territories}
@@ -265,17 +269,88 @@ class Game:
                     break
         elif phase == "attack":
             for t in self.territories:
-                if t.contains(pos):
-                    if t.owner != current_index:
-                        # Auswahl: mit wie vielen Truppen möchtest du angreifen
-                        # Fenster zum Würfeln (KLick zum würfeln, Dann Ergebniss vom Gegener anzeigen)
-                        # Ergebnis auswerten -> welcher spieler verliert wie viele Truppen?
-                        # Frage: Willst du den Kampf weiter führen?
-                        # -> Ergebnis auswerten
-                        #
-                        # attack logik
-                        break
+                if not t.contains(pos):
+                    continue
 
+                # --- Schritt 1: Eigenes Territorium als Angreifer auswählen ---
+                if t.owner == current_index:
+                    if t.troops >= 2:
+                        self.selected_attacker = t
+                        self.selected = t
+                        print(f"Angreifer gewählt: {t.id} ({t.troops} Truppen)")
+                    else:
+                        print(f"{t.id} hat zu wenig Truppen zum Angreifen (mind. 2 nötig).")
+
+                # --- Schritt 2: Feindliches Ziel anklicken → Kampf starten ---
+                elif self.selected_attacker is not None:
+                    self.active_combat = Combat(self.selected_attacker, t, self.players)
+                    self._run_combat_round()
+                break
+
+    def _run_combat_round(self):
+        """
+        Führt eine einzelne Kampfrunde durch.
+
+        Fragt den Spieler nach der Würfelanzahl, lässt beide Seiten würfeln,
+        wertet das Ergebnis aus und bietet anschließend an, weiterzukämpfen
+        oder den Angriff zu beenden.
+        """
+        combat = self.active_combat
+
+        # Würfelanzahl bestimmen (1–3, max. Truppen−1)
+        max_dice = min(Combat.MAX_ATTACKER_DICE, combat.attacking_territory.troops - 1)
+        num_dice = self._ask_dice_count(max_dice)  # → Dialog/Input, siehe unten
+
+        # Kampfrunde ausführen
+        combat.fight(num_dice)
+
+        print(
+            f"Würfel Angreifer: {combat.attacker_dice}  |  "
+            f"Würfel Verteidiger: {combat.defender_dice}\n"
+            f"Verluste → Angreifer: {combat.last_attacker_losses}  |  "
+            f"Verteidiger: {combat.last_defender_losses}"
+        )
+
+        # Eroberung?
+        if combat.check_conquest():
+            print(f"{combat.attacker.name} hat {combat.defending_territory.id} erobert!")
+            self._end_combat()
+            return
+
+        # Weiterkämpfen?
+        if combat.can_continue_attack():
+            if self._ask_continue_attack():  # → Dialog/Input, siehe unten
+                self._run_combat_round()  # Rekursiv: nächste Runde
+            else:
+                self._end_combat()
+        else:
+            print("Zu wenig Truppen – Angriff wird abgebrochen.")
+            self._end_combat()
+
+    def _end_combat(self):
+        """Räumt den Kampfzustand auf und deselektiert alle Territorien."""
+        self.active_combat = None
+        self.selected_attacker = None
+        self.selected = None
+
+    # --- Placeholder-Methoden: hier später echte Dialoge einbauen ---
+
+    def _ask_dice_count(self, max_dice: int) -> int:
+        """
+        Fragt den Spieler, mit wie vielen Würfeln er angreifen möchte.
+        Aktuell: automatisch maximale Würfelanzahl (später: UI-Dialog).
+        """
+        # TODO: Overlay mit Buttons "1 Würfel / 2 Würfel / 3 Würfel" anzeigen
+        print(f"Würfelanzahl: {max_dice} (automatisch, max. möglich)")
+        return max_dice
+
+    def _ask_continue_attack(self) -> bool:
+        """
+        Fragt den Spieler, ob er den Angriff fortsetzen möchte.
+        Aktuell: immer weiterkämpfen (später: UI-Dialog mit Ja/Nein).
+        """
+        # TODO: Overlay mit "Weiterkämpfen / Abbrechen" anzeigen
+        return True
 
     def _end_turn(self):
         """Beendet den Zug und wechselt zum nächsten Spieler."""
