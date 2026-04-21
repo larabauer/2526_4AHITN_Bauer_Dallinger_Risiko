@@ -33,19 +33,16 @@ def initial_num_countries_for_players(players: int, num_countries: int):
 
 def calculate_continent_bonus(player, continents_data):
     bonus = 0
-
     player_territory_ids = [t.id for t in player.territories]
 
     for continent in continents_data:
-        for key, value in continent.items():
-            if key == "points":
-                continue
+        continent_points = continent["points"]
 
-            continent_countries = value
-            continent_points = continent["points"]
+        continent_name = next(k for k in continent if k != "points")
+        continent_countries = continent[continent_name]
 
-            if all(country in player_territory_ids for country in continent_countries):
-                bonus += continent_points
+        if all(country in player_territory_ids for country in continent_countries):
+            bonus += continent_points
 
     return bonus
 
