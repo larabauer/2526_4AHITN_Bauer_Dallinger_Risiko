@@ -178,6 +178,14 @@ class MapLoader:
 
 class Game:
 
+    # ── Angriffs-Subphasen ────────────────────────────────────────────────────
+    # "intro"               → Overlay: "Wähle ein Territorium das angreift"
+    # "select_attacker"     → Spieler klickt eigenes Territorium (kein Overlay)
+    # "select_defender_intro" → Overlay: "Wähle das Ziel"
+    # "select_defender"     → Spieler klickt feindliches Territorium (kein Overlay)
+    # "combat_roll"         → Overlay: Würfeln-Screen
+    # "combat_result"       → Overlay: Ergebnis-Screen
+
     def __init__(self, num_players):
         self.quit_rect = None
         self.running = None
@@ -213,9 +221,26 @@ class Game:
         self._assign_territories()
         self._start_placement_phase()
 
-        #for attack
+        # ── Angriffs-State ────────────────────────────────────────────────────
         self.selected_attacker = None
         self.active_combat: Combat | None = None
+        self.attack_subphase: str | None = None
+        self.pending_dice_count: int | None = None
+
+        # Gespeichertes Ergebnis der letzten Kampfrunde (für Overlay-Logik)
+        self.combat_last_conquered: bool = False
+        self.combat_last_can_continue: bool = False
+
+        # UI-Rects für Angriffs-Overlays
+        self.attack_intro_continue_rect: pygame.Rect | None = None
+        self.attack_defender_intro_continue_rect: pygame.Rect | None = None
+        self.combat_dice_rects: dict[int, pygame.Rect] = {}
+        self.combat_roll_rect: pygame.Rect | None = None
+        self.combat_result_continue_rect: pygame.Rect | None = None
+        self.combat_result_end_rect: pygame.Rect | None = None
+        self.attack_end_phase_rect: pygame.Rect | None = None
+
+    # ── Setup ──────────────────────────────────────────────────────────────────
 
     def _assign_territories(self):
         assignments = initialCountries.initial_countries_for_players(self.num_players)
@@ -234,16 +259,28 @@ class Game:
         player.calculate_reinforcements(self.continents_data)
         self.turn_manager.set_phase("placement")
         self.show_turn_overlay = True
+        # Angriffs-State zurücksetzen
+        self.selected_attacker = None
+        self.active_combat = None
+        self.attack_subphase = None
+        self.pending_dice_count = None
 
     def _start_attack_phase(self):
-        player = self.turn_manager.get_current_player()
         self.turn_manager.set_phase("attack")
+        self.attack_subphase = "intro"
+        self.selected_attacker = None
+        self.selected = None
+        self.active_combat = None
+        self.pending_dice_count = None
+
+    # ── Klick-Handling (Karte) ─────────────────────────────────────────────────
 
     def handle_click(self, pos):
         phase = self.turn_manager.phase
         current_player = self.turn_manager.get_current_player()
         current_index = self.turn_manager.current_index
 
+        # ── Platzierungsphase ──────────────────────────────────────────────────
         if phase == "placement":
             for t in self.territories:
                 if t.contains(pos):
@@ -254,96 +291,124 @@ class Game:
                             print(f"+1 Truppe auf {t.id} | Noch zu setzen: {current_player.reinforcements}")
 
                             if current_player.reinforcements == 0:
+                                # Zur Angriffsphase wechseln (KEIN sofortiger _end_turn mehr)
                                 self._start_attack_phase()
-                                self._end_turn()
                     else:
                         print("Das ist nicht dein Land!")
                     self.selected = t
                     break
-        elif phase == "attack":
+
+        # ── Angriffsphase: Angreifer wählen ───────────────────────────────────
+        elif phase == "attack" and self.attack_subphase == "select_attacker":
+            # "Zug beenden"-Button im HUD
+            if self.attack_end_phase_rect and self.attack_end_phase_rect.collidepoint(pos):
+                self._end_turn()
+                return
+
             for t in self.territories:
                 if not t.contains(pos):
                     continue
-
-                # --- Schritt 1: Eigenes Territorium als Angreifer auswählen ---
                 if t.owner == current_index:
                     if t.troops >= 2:
                         self.selected_attacker = t
                         self.selected = t
-                        print(f"Angreifer gewählt: {t.id} ({t.troops} Truppen)")
+                        self.attack_subphase = "select_defender_intro"
+                        print(f"Angreifer: {t.id} ({t.troops} Truppen)")
                     else:
-                        print(f"{t.id} hat zu wenig Truppen zum Angreifen (mind. 2 nötig).")
-
-                # --- Schritt 2: Feindliches Ziel anklicken → Kampf starten ---
-                elif self.selected_attacker is not None:
-                    self.active_combat = Combat(self.selected_attacker, t, self.players)
-                    self._run_combat_round()
+                        print(f"{t.id} hat zu wenig Truppen (mind. 2 nötig).")
                 break
 
-    def _run_combat_round(self):
-        """
-        Führt eine einzelne Kampfrunde durch.
+        # ── Angriffsphase: Verteidiger wählen ─────────────────────────────────
+        elif phase == "attack" and self.attack_subphase == "select_defender":
+            for t in self.territories:
+                if not t.contains(pos):
+                    continue
+                if t.owner != current_index:
+                    max_dice = min(Combat.MAX_ATTACKER_DICE,
+                                   self.selected_attacker.troops - 1)
+                    self.active_combat = Combat(self.selected_attacker, t, self.players)
+                    self.pending_dice_count = max_dice
+                    self.attack_subphase = "combat_roll"
+                    print(f"Ziel: {t.id} ({t.troops} Truppen)")
+                else:
+                    # Eigenes Land angeklickt → neuen Angreifer wählen
+                    if t.troops >= 2:
+                        self.selected_attacker = t
+                        self.selected = t
+                        print(f"Angreifer geändert: {t.id}")
+                break
 
-        Fragt den Spieler nach der Würfelanzahl, lässt beide Seiten würfeln,
-        wertet das Ergebnis aus und bietet anschließend an, weiterzukämpfen
-        oder den Angriff zu beenden.
-        """
-        combat = self.active_combat
+    # ── Klick-Handling (Angriffs-Overlays) ────────────────────────────────────
 
-        # Würfelanzahl bestimmen (1–3, max. Truppen−1)
-        max_dice = min(Combat.MAX_ATTACKER_DICE, combat.attacking_territory.troops - 1)
-        num_dice = self._ask_dice_count(max_dice)  # → Dialog/Input, siehe unten
+    def _handle_attack_overlay_click(self, pos):
+        subphase = self.attack_subphase
 
-        # Kampfrunde ausführen
-        combat.fight(num_dice)
+        # Intro-Overlay
+        if subphase == "intro":
+            if (self.attack_intro_continue_rect and
+                    self.attack_intro_continue_rect.collidepoint(pos)):
+                self.attack_subphase = "select_attacker"
 
-        print(
-            f"Würfel Angreifer: {combat.attacker_dice}  |  "
-            f"Würfel Verteidiger: {combat.defender_dice}\n"
-            f"Verluste → Angreifer: {combat.last_attacker_losses}  |  "
-            f"Verteidiger: {combat.last_defender_losses}"
-        )
+        # "Angreifer gewählt"-Overlay
+        elif subphase == "select_defender_intro":
+            if (self.attack_defender_intro_continue_rect and
+                    self.attack_defender_intro_continue_rect.collidepoint(pos)):
+                self.attack_subphase = "select_defender"
 
-        # Eroberung?
-        if combat.check_conquest():
-            print(f"{combat.attacker.name} hat {combat.defending_territory.id} erobert!")
-            self._end_combat()
-            return
+        # Würfel-Overlay
+        elif subphase == "combat_roll":
+            combat = self.active_combat
+            max_dice = min(Combat.MAX_ATTACKER_DICE,
+                           combat.attacking_territory.troops - 1)
 
-        # Weiterkämpfen?
-        if combat.can_continue_attack():
-            if self._ask_continue_attack():  # → Dialog/Input, siehe unten
-                self._run_combat_round()  # Rekursiv: nächste Runde
-            else:
+            # Würfelanzahl-Buttons
+            for count, rect in self.combat_dice_rects.items():
+                if rect.collidepoint(pos) and count <= max_dice:
+                    self.pending_dice_count = count
+                    return  # Nur Auswahl ändern, noch nicht würfeln
+
+            # Würfeln-Button
+            if self.combat_roll_rect and self.combat_roll_rect.collidepoint(pos):
+                combat.fight(self.pending_dice_count)
+                self.combat_last_conquered = combat.check_conquest()
+                self.combat_last_can_continue = (
+                    combat.can_continue_attack()
+                    if not self.combat_last_conquered else False
+                )
+                self.attack_subphase = "combat_result"
+                print(
+                    f"Würfel: {combat.attacker_dice} vs {combat.defender_dice} | "
+                    f"Verluste → Ang: -{combat.last_attacker_losses}  "
+                    f"Vert: -{combat.last_defender_losses}"
+                )
+
+        # Ergebnis-Overlay
+        elif subphase == "combat_result":
+            if (self.combat_result_continue_rect and
+                    self.combat_result_continue_rect.collidepoint(pos)):
+                if self.combat_last_conquered or not self.combat_last_can_continue:
+                    self._end_combat()
+                else:
+                    # Weiterkämpfen
+                    self.pending_dice_count = min(
+                        Combat.MAX_ATTACKER_DICE,
+                        self.active_combat.attacking_territory.troops - 1
+                    )
+                    self.attack_subphase = "combat_roll"
+
+            elif (self.combat_result_end_rect and
+                  self.combat_result_end_rect.collidepoint(pos)):
                 self._end_combat()
-        else:
-            print("Zu wenig Truppen – Angriff wird abgebrochen.")
-            self._end_combat()
 
     def _end_combat(self):
-        """Räumt den Kampfzustand auf und deselektiert alle Territorien."""
+        """Kampf beenden, zurück zu Angreifer-Auswahl."""
         self.active_combat = None
         self.selected_attacker = None
         self.selected = None
-
-    # --- Placeholder-Methoden: hier später echte Dialoge einbauen ---
-
-    def _ask_dice_count(self, max_dice: int) -> int:
-        """
-        Fragt den Spieler, mit wie vielen Würfeln er angreifen möchte.
-        Aktuell: automatisch maximale Würfelanzahl (später: UI-Dialog).
-        """
-        # TODO: Overlay mit Buttons "1 Würfel / 2 Würfel / 3 Würfel" anzeigen
-        print(f"Würfelanzahl: {max_dice} (automatisch, max. möglich)")
-        return max_dice
-
-    def _ask_continue_attack(self) -> bool:
-        """
-        Fragt den Spieler, ob er den Angriff fortsetzen möchte.
-        Aktuell: immer weiterkämpfen (später: UI-Dialog mit Ja/Nein).
-        """
-        # TODO: Overlay mit "Weiterkämpfen / Abbrechen" anzeigen
-        return True
+        self.pending_dice_count = None
+        self.combat_last_conquered = False
+        self.combat_last_can_continue = False
+        self.attack_subphase = "select_attacker"
 
     def _end_turn(self):
         self.turn_manager.next_player()
@@ -355,6 +420,16 @@ class Game:
         self.screen.fill((30, 100, 160))
 
         for t in self.territories:
+            # Angreifer-Territorium hellumrahmen
+            if t is self.selected_attacker and self.attack_subphase in (
+                    "select_defender_intro", "select_defender",
+                    "combat_roll", "combat_result"):
+                valid = [(x, y) for x, y in t.points if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
+                if len(valid) >= 3:
+                    try:
+                        pygame.draw.polygon(self.screen, (255, 255, 100), valid, 5)
+                    except Exception:
+                        pass
             t.draw(self.screen, self.font)
 
         if self.selected:
@@ -364,47 +439,102 @@ class Game:
             self.screen.blit(shadow, (12, 12))
             self.screen.blit(text, (10, 10))
 
-        if not self.show_turn_overlay and not self.show_menu:
+        # Bestimme ob ein Vollbild-Overlay aktiv ist
+        attack_overlay = (
+            self.turn_manager.phase == "attack" and
+            self.attack_subphase in ("intro", "select_defender_intro",
+                                     "combat_roll", "combat_result")
+        )
+
+        # HUD nur wenn kein Vollbild-Overlay
+        if not self.show_turn_overlay and not self.show_menu and not attack_overlay:
             self._draw_hud()
 
+        # Overlays in Prioritätsreihenfolge
         if self.show_turn_overlay:
             self._draw_turn_overlay()
-
-        if self.show_menu:
+        elif self.show_menu:
             self.draw_menu()
+        elif attack_overlay:
+            subphase = self.attack_subphase
+            if subphase == "intro":
+                self._draw_attack_intro_overlay()
+            elif subphase == "select_defender_intro":
+                self._draw_attack_select_defender_overlay()
+            elif subphase == "combat_roll":
+                self._draw_combat_roll_overlay()
+            elif subphase == "combat_result":
+                self._draw_combat_result_overlay()
 
         pygame.display.flip()
 
+    # ── HUD ───────────────────────────────────────────────────────────────────
+
     def _draw_hud(self):
-        """Zeigt oben rechts: Aktueller Spieler + noch zu platzierende Truppen."""
         player = self.turn_manager.get_current_player()
         phase = self.turn_manager.phase
 
-        panel_w, panel_h = 340, 90
+        panel_w, panel_h = 360, 110
         panel_x = WIDTH - panel_w - 20
         panel_y = 20
 
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         panel.fill((0, 0, 0, 160))
         self.screen.blit(panel, (panel_x, panel_y))
-
-        pygame.draw.rect(self.screen, player.color,
-                         (panel_x, panel_y, 8, panel_h))
+        pygame.draw.rect(self.screen, player.color, (panel_x, panel_y, 8, panel_h))
 
         name_surf = self.font.render(player.name, True, player.color)
         self.screen.blit(name_surf, (panel_x + 18, panel_y + 10))
 
-        phase_text = "Phase: Truppen setzen" if phase == "placement" else f"Phase: {phase}"
-        phase_surf = self.font_small.render(phase_text, True, (200, 200, 200))
-        self.screen.blit(phase_surf, (panel_x + 18, panel_y + 38))
+        if phase == "placement":
+            phase_text = "Phase: Truppen setzen"
+            phase_surf = self.font_small.render(phase_text, True, (200, 200, 200))
+            self.screen.blit(phase_surf, (panel_x + 18, panel_y + 38))
 
-        remaining = player.reinforcements
-        troop_label = self.font_small.render("Noch zu setzen:", True, (200, 200, 200))
-        troop_num = self.font_large.render(str(remaining), True, (255, 230, 80))
-        self.screen.blit(troop_label, (panel_x + 18, panel_y + 58))
-        self.screen.blit(troop_num,
-                         (panel_x + panel_w - troop_num.get_width() - 15,
-                          panel_y + panel_h // 2 - troop_num.get_height() // 2))
+            remaining = player.reinforcements
+            troop_label = self.font_small.render("Noch zu setzen:", True, (200, 200, 200))
+            troop_num = self.font_large.render(str(remaining), True, (255, 230, 80))
+            self.screen.blit(troop_label, (panel_x + 18, panel_y + 62))
+            self.screen.blit(troop_num,
+                             (panel_x + panel_w - troop_num.get_width() - 15,
+                              panel_y + panel_h // 2 - troop_num.get_height() // 2))
+
+        elif phase == "attack":
+            subphase = self.attack_subphase
+            if subphase == "select_attacker":
+                phase_surf = self.font_small.render("Phase: Angriff – Angreifer wählen",
+                                                    True, (200, 200, 200))
+                self.screen.blit(phase_surf, (panel_x + 18, panel_y + 38))
+
+                # "Zug beenden"-Button
+                btn_w, btn_h = 320, 34
+                btn_x = panel_x + 18
+                btn_y = panel_y + panel_h + 10
+                self.attack_end_phase_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+                mx, my = pygame.mouse.get_pos()
+                hover = self.attack_end_phase_rect.collidepoint(mx, my)
+                pygame.draw.rect(self.screen,
+                                 (80, 100, 80) if hover else (55, 75, 55),
+                                 self.attack_end_phase_rect, border_radius=6)
+                end_txt = self.font_small.render("Zug beenden (Angriff überspringen)",
+                                                 True, (200, 230, 200))
+                self.screen.blit(end_txt, (btn_x + btn_w // 2 - end_txt.get_width() // 2,
+                                           btn_y + btn_h // 2 - end_txt.get_height() // 2))
+
+            elif subphase == "select_defender":
+                phase_surf = self.font_small.render("Phase: Angriff – Ziel wählen",
+                                                    True, (200, 200, 200))
+                self.screen.blit(phase_surf, (panel_x + 18, panel_y + 38))
+                if self.selected_attacker:
+                    att_txt = self.font_small.render(
+                        f"Angreifer: {self.selected_attacker.id.replace('_',' ').title()}",
+                        True, (255, 230, 80))
+                    self.screen.blit(att_txt, (panel_x + 18, panel_y + 62))
+                self.attack_end_phase_rect = None  # Kein Beenden-Button in dieser Sub-Phase
+            else:
+                self.attack_end_phase_rect = None
+
+    # ── Placement-Overlay ─────────────────────────────────────────────────────
 
     def _draw_turn_overlay(self):
         player = self.turn_manager.get_current_player()
@@ -421,38 +551,29 @@ class Game:
         card.fill((20, 20, 30, 240))
         self.screen.blit(card, (card_x, card_y))
 
-        pygame.draw.rect(self.screen, player.color,
-                         (card_x, card_y, card_w, 8))
-        pygame.draw.rect(self.screen, player.color,
-                         (card_x, card_y, card_w, card_h), 3)
+        pygame.draw.rect(self.screen, player.color, (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, player.color, (card_x, card_y, card_w, card_h), 3)
 
         header = self.font_small.render("DU BIST DRAN", True, (180, 180, 180))
-        self.screen.blit(header,
-                         (card_x + card_w // 2 - header.get_width() // 2,
-                          card_y + 25))
+        self.screen.blit(header, (card_x + card_w // 2 - header.get_width() // 2, card_y + 25))
 
         name_surf = self.font_large.render(player.name, True, player.color)
-        self.screen.blit(name_surf,
-                         (card_x + card_w // 2 - name_surf.get_width() // 2,
-                          card_y + 60))
+        self.screen.blit(name_surf, (card_x + card_w // 2 - name_surf.get_width() // 2, card_y + 60))
 
         reinf_text = f"Truppen zu setzen: {player.reinforcements}"
         reinf_surf = self.font.render(reinf_text, True, (255, 230, 80))
         self.screen.blit(reinf_surf,
-                         (card_x + card_w // 2 - reinf_surf.get_width() // 2,
-                          card_y + 140))
+                         (card_x + card_w // 2 - reinf_surf.get_width() // 2, card_y + 140))
 
-        hint = self.font_small.render("Klicke auf deine Länder um Truppen zu setzen", True, (160, 160, 160))
-        self.screen.blit(hint,
-                         (card_x + card_w // 2 - hint.get_width() // 2,
-                          card_y + 180))
+        hint = self.font_small.render("Klicke auf deine Länder um Truppen zu setzen",
+                                      True, (160, 160, 160))
+        self.screen.blit(hint, (card_x + card_w // 2 - hint.get_width() // 2, card_y + 180))
 
         btn_w, btn_h = 200, 45
         btn_x = card_x + card_w // 2 - btn_w // 2
         btn_y = card_y + card_h - btn_h - 20
 
         self.turn_overlay_continue_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-
         mx, my = pygame.mouse.get_pos()
         hover = self.turn_overlay_continue_rect.collidepoint(mx, my)
         btn_color = tuple(min(255, c + 50) for c in player.color) if hover else player.color
@@ -460,11 +581,402 @@ class Game:
         pygame.draw.rect(self.screen, btn_color,
                          self.turn_overlay_continue_rect, border_radius=8)
         btn_txt = self.font.render("Los geht's!", True, (255, 255, 255))
-        self.screen.blit(btn_txt,
-                         (btn_x + btn_w // 2 - btn_txt.get_width() // 2,
-                          btn_y + btn_h // 2 - btn_txt.get_height() // 2))
+        self.screen.blit(btn_txt, (btn_x + btn_w // 2 - btn_txt.get_width() // 2,
+                                   btn_y + btn_h // 2 - btn_txt.get_height() // 2))
 
-    # ── Event-Handling ────────────────────────────────────────────────────────
+    # ── Angriffs-Overlays ─────────────────────────────────────────────────────
+
+    def _draw_attack_intro_overlay(self):
+        """Intro-Overlay zu Beginn der Angriffsphase."""
+        player = self.turn_manager.get_current_player()
+
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        card_w, card_h = 560, 310
+        card_x = WIDTH // 2 - card_w // 2
+        card_y = HEIGHT // 2 - card_h // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        card.fill((25, 10, 10, 240))
+        self.screen.blit(card, (card_x, card_y))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, card_h), 3)
+
+        # Header
+        header = self.font_small.render("ANGRIFFSPHASE", True, (180, 100, 100))
+        self.screen.blit(header,
+                         (card_x + card_w // 2 - header.get_width() // 2, card_y + 25))
+
+        # Spielername
+        name_surf = self.font_large.render(player.name, True, player.color)
+        self.screen.blit(name_surf,
+                         (card_x + card_w // 2 - name_surf.get_width() // 2, card_y + 58))
+
+        # Trennlinie
+        pygame.draw.line(self.screen, (80, 40, 40),
+                         (card_x + 30, card_y + 120), (card_x + card_w - 30, card_y + 120), 1)
+
+        # Hinweis
+        hint1 = self.font.render("Waehle ein Territorium, das angreift",
+                                 True, (230, 220, 220))
+        self.screen.blit(hint1,
+                         (card_x + card_w // 2 - hint1.get_width() // 2, card_y + 138))
+
+        hint2 = self.font_small.render("(mind. 2 Truppen erforderlich)",
+                                       True, (150, 130, 130))
+        self.screen.blit(hint2,
+                         (card_x + card_w // 2 - hint2.get_width() // 2, card_y + 175))
+
+        # Button
+        btn_w, btn_h = 220, 48
+        btn_x = card_x + card_w // 2 - btn_w // 2
+        btn_y = card_y + card_h - btn_h - 20
+        self.attack_intro_continue_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        mx, my = pygame.mouse.get_pos()
+        hover = self.attack_intro_continue_rect.collidepoint(mx, my)
+        btn_color = (220, 70, 70) if hover else (170, 35, 35)
+        pygame.draw.rect(self.screen, btn_color,
+                         self.attack_intro_continue_rect, border_radius=10)
+
+        btn_txt = self.font.render("Los geht's!", True, (255, 255, 255))
+        self.screen.blit(btn_txt, (btn_x + btn_w // 2 - btn_txt.get_width() // 2,
+                                   btn_y + btn_h // 2 - btn_txt.get_height() // 2))
+
+    def _draw_attack_select_defender_overlay(self):
+        """Overlay nach Angreifer-Auswahl – fordert Ziel-Auswahl."""
+        player = self.turn_manager.get_current_player()
+        attacker = self.selected_attacker
+
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        card_w, card_h = 580, 310
+        card_x = WIDTH // 2 - card_w // 2
+        card_y = HEIGHT // 2 - card_h // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        card.fill((25, 10, 10, 240))
+        self.screen.blit(card, (card_x, card_y))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, card_h), 3)
+
+        # Header
+        header = self.font_small.render("ANGREIFER GEWAEHLT", True, (180, 100, 100))
+        self.screen.blit(header,
+                         (card_x + card_w // 2 - header.get_width() // 2, card_y + 22))
+
+        # Territoriumsname
+        t_name = attacker.id.replace("_", " ").title()
+        name_surf = self.font_large.render(t_name, True, player.color)
+        self.screen.blit(name_surf,
+                         (card_x + card_w // 2 - name_surf.get_width() // 2, card_y + 55))
+
+        # Truppenzahl
+        troops_surf = self.font.render(f"{attacker.troops} Truppen verfuegbar",
+                                       True, (255, 230, 80))
+        self.screen.blit(troops_surf,
+                         (card_x + card_w // 2 - troops_surf.get_width() // 2, card_y + 115))
+
+        pygame.draw.line(self.screen, (80, 40, 40),
+                         (card_x + 30, card_y + 148), (card_x + card_w - 30, card_y + 148), 1)
+
+        # Hinweis
+        hint = self.font.render("Waehle das Territorium, das du angreifen moechtest",
+                                True, (230, 220, 220))
+        self.screen.blit(hint,
+                         (card_x + card_w // 2 - hint.get_width() // 2, card_y + 165))
+
+        # Button
+        btn_w, btn_h = 220, 48
+        btn_x = card_x + card_w // 2 - btn_w // 2
+        btn_y = card_y + card_h - btn_h - 20
+        self.attack_defender_intro_continue_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        mx, my = pygame.mouse.get_pos()
+        hover = self.attack_defender_intro_continue_rect.collidepoint(mx, my)
+        btn_color = (220, 70, 70) if hover else (170, 35, 35)
+        pygame.draw.rect(self.screen, btn_color,
+                         self.attack_defender_intro_continue_rect, border_radius=10)
+
+        btn_txt = self.font.render("Weiter", True, (255, 255, 255))
+        self.screen.blit(btn_txt, (btn_x + btn_w // 2 - btn_txt.get_width() // 2,
+                                   btn_y + btn_h // 2 - btn_txt.get_height() // 2))
+
+    def _draw_combat_roll_overlay(self):
+        """Kampf-Overlay: Würfelanzahl wählen + Würfeln-Button."""
+        combat = self.active_combat
+        player = self.turn_manager.get_current_player()
+        attacker = combat.attacking_territory
+        defender = combat.defending_territory
+
+        max_dice = min(Combat.MAX_ATTACKER_DICE, attacker.troops - 1)
+        if self.pending_dice_count is None or self.pending_dice_count > max_dice:
+            self.pending_dice_count = max_dice
+
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 220))
+        self.screen.blit(overlay, (0, 0))
+
+        card_w, card_h = 720, 420
+        card_x = WIDTH // 2 - card_w // 2
+        card_y = HEIGHT // 2 - card_h // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        card.fill((20, 12, 12, 245))
+        self.screen.blit(card, (card_x, card_y))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, card_h), 3)
+
+        # Titel
+        title = self.font_large.render("KAMPF!", True, (220, 60, 60))
+        self.screen.blit(title, (card_x + card_w // 2 - title.get_width() // 2, card_y + 18))
+
+        # Trennlinie
+        pygame.draw.line(self.screen, (80, 30, 30),
+                         (card_x + 30, card_y + 78), (card_x + card_w - 30, card_y + 78), 1)
+
+        # ── Angreifer-Seite (links) ──
+        att_name = attacker.id.replace("_", " ").title()
+        att_txt = self.font.render(att_name, True, player.color)
+        self.screen.blit(att_txt, (card_x + 40, card_y + 90))
+
+        att_num = self.font_large.render(str(attacker.troops), True, (255, 230, 80))
+        self.screen.blit(att_num, (card_x + 40, card_y + 122))
+
+        att_lbl = self.font_small.render("Truppen", True, (160, 140, 140))
+        self.screen.blit(att_lbl, (card_x + 40 + att_num.get_width() + 8, card_y + 155))
+
+        # ── VS ──
+        vs = self.font_large.render("VS", True, (160, 140, 140))
+        self.screen.blit(vs, (card_x + card_w // 2 - vs.get_width() // 2, card_y + 130))
+
+        # ── Verteidiger-Seite (rechts) ──
+        def_player = self.players[defender.owner] if defender.owner is not None else None
+        def_color = def_player.color if def_player else (200, 200, 200)
+        def_name = defender.id.replace("_", " ").title()
+        def_txt = self.font.render(def_name, True, def_color)
+        self.screen.blit(def_txt, (card_x + card_w - 40 - def_txt.get_width(), card_y + 90))
+
+        def_num = self.font_large.render(str(defender.troops), True, (255, 230, 80))
+        self.screen.blit(def_num, (card_x + card_w - 40 - def_num.get_width(), card_y + 122))
+
+        def_lbl = self.font_small.render("Truppen", True, (160, 140, 140))
+        self.screen.blit(def_lbl,
+                         (card_x + card_w - 40 - def_num.get_width() - def_lbl.get_width() - 8,
+                          card_y + 155))
+
+        # Trennlinie
+        pygame.draw.line(self.screen, (80, 30, 30),
+                         (card_x + 30, card_y + 205), (card_x + card_w - 30, card_y + 205), 1)
+
+        # ── Würfelanzahl-Auswahl ──
+        dice_lbl = self.font_small.render("Wuerfelanzahl waehlen:", True, (200, 180, 180))
+        self.screen.blit(dice_lbl, (card_x + card_w // 2 - dice_lbl.get_width() // 2,
+                                    card_y + 218))
+
+        self.combat_dice_rects = {}
+        btn_w2, btn_h2 = 80, 46
+        total_w = 3 * btn_w2 + 2 * 14
+        start_x = card_x + card_w // 2 - total_w // 2
+
+        for i in range(1, 4):
+            bx = start_x + (i - 1) * (btn_w2 + 14)
+            by = card_y + 248
+            r = pygame.Rect(bx, by, btn_w2, btn_h2)
+            self.combat_dice_rects[i] = r
+
+            available = i <= max_dice
+            selected = i == self.pending_dice_count
+
+            if not available:
+                bg = (45, 35, 35)
+                fg = (90, 70, 70)
+            elif selected:
+                bg = (200, 50, 50)
+                fg = (255, 255, 255)
+            else:
+                mx2, my2 = pygame.mouse.get_pos()
+                hover = r.collidepoint(mx2, my2)
+                bg = (100, 50, 50) if hover else (70, 35, 35)
+                fg = (255, 255, 255)
+
+            pygame.draw.rect(self.screen, bg, r, border_radius=8)
+            if available:
+                pygame.draw.rect(self.screen, (180, 40, 40) if selected else (120, 60, 60),
+                                 r, 2, border_radius=8)
+
+            d_txt = self.font_large.render(str(i), True, fg)
+            self.screen.blit(d_txt, (bx + btn_w2 // 2 - d_txt.get_width() // 2,
+                                     by + btn_h2 // 2 - d_txt.get_height() // 2))
+
+        # ── Würfeln-Button ──
+        roll_w, roll_h = 280, 58
+        roll_x = card_x + card_w // 2 - roll_w // 2
+        roll_y = card_y + card_h - roll_h - 20
+        self.combat_roll_rect = pygame.Rect(roll_x, roll_y, roll_w, roll_h)
+
+        mx3, my3 = pygame.mouse.get_pos()
+        hover_roll = self.combat_roll_rect.collidepoint(mx3, my3)
+        roll_color = (230, 80, 80) if hover_roll else (180, 35, 35)
+        pygame.draw.rect(self.screen, roll_color, self.combat_roll_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (220, 100, 100), self.combat_roll_rect, 2, border_radius=12)
+
+        roll_txt = self.font_large.render("WUERFELN!", True, (255, 255, 255))
+        self.screen.blit(roll_txt, (roll_x + roll_w // 2 - roll_txt.get_width() // 2,
+                                    roll_y + roll_h // 2 - roll_txt.get_height() // 2))
+
+    def _draw_combat_result_overlay(self):
+        """Kampf-Overlay: Würfelergebnisse und Verluste anzeigen."""
+        combat = self.active_combat
+        player = self.turn_manager.get_current_player()
+        attacker = combat.attacking_territory
+        defender = combat.defending_territory
+        def_player = self.players[defender.owner] if defender.owner is not None else None
+        def_color = def_player.color if def_player else (200, 200, 200)
+
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 220))
+        self.screen.blit(overlay, (0, 0))
+
+        card_w, card_h = 740, 500
+        card_x = WIDTH // 2 - card_w // 2
+        card_y = HEIGHT // 2 - card_h // 2
+
+        card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        card.fill((20, 12, 12, 245))
+        self.screen.blit(card, (card_x, card_y))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, 8))
+        pygame.draw.rect(self.screen, (180, 40, 40), (card_x, card_y, card_w, card_h), 3)
+
+        # Titel
+        title = self.font_large.render("WUERFELERGEBNIS", True, (220, 60, 60))
+        self.screen.blit(title, (card_x + card_w // 2 - title.get_width() // 2, card_y + 18))
+
+        pygame.draw.line(self.screen, (80, 30, 30),
+                         (card_x + 30, card_y + 78), (card_x + card_w - 30, card_y + 78), 1)
+
+        # ── Angreifer-Würfel (links) ──
+        att_label = self.font.render(attacker.id.replace("_", " ").title(),
+                                     True, player.color)
+        self.screen.blit(att_label, (card_x + 40, card_y + 90))
+
+        att_dice = getattr(combat, "attacker_dice", [])
+        for i, d in enumerate(att_dice):
+            self._draw_die(card_x + 40 + i * 82, card_y + 125, d, (180, 40, 40))
+
+        loss_att = getattr(combat, "last_attacker_losses", 0)
+        loss_txt_a = self.font.render(f"Verluste: -{loss_att}", True,
+                                      (255, 90, 90) if loss_att > 0 else (100, 180, 100))
+        self.screen.blit(loss_txt_a, (card_x + 40, card_y + 210))
+
+        troops_att = self.font_small.render(f"Verbleibend: {attacker.troops} Truppen",
+                                            True, (200, 200, 200))
+        self.screen.blit(troops_att, (card_x + 40, card_y + 245))
+
+        # ── Mittel-Trennlinie ──
+        pygame.draw.line(self.screen, (80, 30, 30),
+                         (card_x + card_w // 2, card_y + 88),
+                         (card_x + card_w // 2, card_y + 275), 1)
+
+        # ── Verteidiger-Würfel (rechts) ──
+        def_label = self.font.render(defender.id.replace("_", " ").title(),
+                                     True, def_color)
+        self.screen.blit(def_label,
+                         (card_x + card_w - 40 - def_label.get_width(), card_y + 90))
+
+        def_dice = getattr(combat, "defender_dice", [])
+        die_start_x = card_x + card_w - 40 - len(def_dice) * 82 + (82 - 60)
+        for i, d in enumerate(def_dice):
+            self._draw_die(die_start_x + i * 82, card_y + 125, d, (40, 80, 180))
+
+        loss_def = getattr(combat, "last_defender_losses", 0)
+        loss_txt_d = self.font.render(f"Verluste: -{loss_def}", True,
+                                      (255, 90, 90) if loss_def > 0 else (100, 180, 100))
+        self.screen.blit(loss_txt_d,
+                         (card_x + card_w - 40 - loss_txt_d.get_width(), card_y + 210))
+
+        troops_def = self.font_small.render(f"Verbleibend: {defender.troops} Truppen",
+                                            True, (200, 200, 200))
+        self.screen.blit(troops_def,
+                         (card_x + card_w - 40 - troops_def.get_width(), card_y + 245))
+
+        # ── Trennlinie ──
+        pygame.draw.line(self.screen, (80, 30, 30),
+                         (card_x + 30, card_y + 285), (card_x + card_w - 30, card_y + 285), 1)
+
+        # ── Status-Meldung ──
+        if self.combat_last_conquered:
+            status = self.font_large.render("TERRITORIUM EROBERT!", True, (255, 210, 50))
+            self.screen.blit(status,
+                             (card_x + card_w // 2 - status.get_width() // 2, card_y + 305))
+        elif not self.combat_last_can_continue:
+            status = self.font.render("Zu wenig Truppen – Angriff wird abgebrochen.",
+                                      True, (200, 150, 150))
+            self.screen.blit(status,
+                             (card_x + card_w // 2 - status.get_width() // 2, card_y + 315))
+
+        # ── Buttons ──
+        mx, my = pygame.mouse.get_pos()
+        btn_h = 50
+
+        if self.combat_last_conquered or not self.combat_last_can_continue:
+            # Nur "Weiter/OK"
+            btn_w = 220
+            btn_x = card_x + card_w // 2 - btn_w // 2
+            btn_y = card_y + card_h - btn_h - 22
+            self.combat_result_continue_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+            self.combat_result_end_rect = None
+
+            hover = self.combat_result_continue_rect.collidepoint(mx, my)
+            c = (200, 160, 30) if self.combat_last_conquered else (60, 80, 100)
+            c_hover = (230, 190, 50) if self.combat_last_conquered else (80, 100, 130)
+            pygame.draw.rect(self.screen, c_hover if hover else c,
+                             self.combat_result_continue_rect, border_radius=10)
+            ok_txt = self.font.render("Weiter", True, (255, 255, 255))
+            self.screen.blit(ok_txt, (btn_x + btn_w // 2 - ok_txt.get_width() // 2,
+                                      btn_y + btn_h // 2 - ok_txt.get_height() // 2))
+
+        else:
+            # "Weiterkämpfen" + "Angriff beenden"
+            btn_w = 240
+            gap = 20
+            total = btn_w * 2 + gap
+            bx1 = card_x + card_w // 2 - total // 2
+            bx2 = bx1 + btn_w + gap
+            by = card_y + card_h - btn_h - 22
+
+            self.combat_result_continue_rect = pygame.Rect(bx1, by, btn_w, btn_h)
+            self.combat_result_end_rect = pygame.Rect(bx2, by, btn_w, btn_h)
+
+            h1 = self.combat_result_continue_rect.collidepoint(mx, my)
+            pygame.draw.rect(self.screen, (220, 70, 70) if h1 else (170, 35, 35),
+                             self.combat_result_continue_rect, border_radius=10)
+            cont_txt = self.font.render("Weiterkaempfen", True, (255, 255, 255))
+            self.screen.blit(cont_txt, (bx1 + btn_w // 2 - cont_txt.get_width() // 2,
+                                        by + btn_h // 2 - cont_txt.get_height() // 2))
+
+            h2 = self.combat_result_end_rect.collidepoint(mx, my)
+            pygame.draw.rect(self.screen, (75, 85, 100) if h2 else (55, 65, 80),
+                             self.combat_result_end_rect, border_radius=10)
+            end_txt = self.font.render("Angriff beenden", True, (200, 210, 220))
+            self.screen.blit(end_txt, (bx2 + btn_w // 2 - end_txt.get_width() // 2,
+                                       by + btn_h // 2 - end_txt.get_height() // 2))
+
+    def _draw_die(self, x: int, y: int, value: int, color: tuple):
+        """Zeichnet einen einzelnen Würfel mit Zahl."""
+        size = 60
+        pygame.draw.rect(self.screen, color, (x, y, size, size), border_radius=10)
+        # Innerer Schatten / Highlight
+        pygame.draw.rect(self.screen, (255, 255, 255), (x, y, size, size), 2, border_radius=10)
+        num = self.font_large.render(str(value), True, (255, 255, 255))
+        self.screen.blit(num, (x + size // 2 - num.get_width() // 2,
+                               y + size // 2 - num.get_height() // 2))
+
+    # ── Event-Loop ────────────────────────────────────────────────────────────
 
     def run(self):
         clock = pygame.time.Clock()
@@ -477,27 +989,30 @@ class Game:
                 if event.type == pygame.QUIT:
                     self.running = False
 
-                # ESC nur verarbeiten wenn kein Overlay offen ist
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        if not self.show_turn_overlay:       # ← NEU: Overlay blockt ESC
+                        if not self.show_turn_overlay:
                             self.show_menu = not self.show_menu
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = pygame.mouse.get_pos()
 
                     if self.show_turn_overlay:
-                        # Nur Weiter-Button reagiert, alles andere ignoriert
                         if (self.turn_overlay_continue_rect and
                                 self.turn_overlay_continue_rect.collidepoint(mouse_pos)):
                             self.show_turn_overlay = False
 
                     elif self.show_menu:
-                        # Nur Menü-Buttons reagieren, Karte wird ignoriert
                         self.handle_menu_click(mouse_pos)
 
+                    elif (self.turn_manager.phase == "attack" and
+                          self.attack_subphase in ("intro", "select_defender_intro",
+                                                   "combat_roll", "combat_result")):
+                        # Klick geht an Overlay-Handler
+                        self._handle_attack_overlay_click(mouse_pos)
+
                     else:
-                        # Normales Spiel
+                        # Normales Spiel (Karte)
                         self.handle_click(mouse_pos)
 
             self.draw()
@@ -513,7 +1028,7 @@ class Game:
         overlay.fill((0, 0, 0))
         self.screen.blit(overlay, (0, 0))
 
-        title = self.font.render("MENÜ", True, (255, 255, 255))
+        title = self.font.render("MENUE", True, (255, 255, 255))
         self.screen.blit(title, (WIDTH // 2 - 50, HEIGHT // 2 - 150))
 
         self.resume_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 - 20, 200, 40)
@@ -525,10 +1040,8 @@ class Game:
         resume = self.font.render("Weiter", True, (255, 255, 255))
         quit_game = self.font.render("Beenden", True, (255, 255, 255))
 
-        self.screen.blit(resume,
-                         (self.resume_rect.x + 40, self.resume_rect.y + 5))
-        self.screen.blit(quit_game,
-                         (self.quit_rect.x + 40, self.quit_rect.y + 5))
+        self.screen.blit(resume, (self.resume_rect.x + 40, self.resume_rect.y + 5))
+        self.screen.blit(quit_game, (self.quit_rect.x + 40, self.quit_rect.y + 5))
 
     def handle_menu_click(self, pos):
         if self.resume_rect and self.resume_rect.collidepoint(pos):
