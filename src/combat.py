@@ -67,6 +67,7 @@ class Combat:
 
     def conquer(self, troops_to_move: int):
         self.defending_territory.owner = self.attacking_territory.owner
+        self.defending_territory.border_color = self.attacker.color
         self.defending_territory.troops = troops_to_move
         self.attacking_territory.troops -= troops_to_move
 

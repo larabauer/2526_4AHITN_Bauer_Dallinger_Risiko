@@ -92,6 +92,7 @@ class Territory:
                            cy - text.get_height() // 2))
 
 
+
 class MapLoader:
     CONTINENT_COLORS = {
         "eastern_australia": (200, 100, 50),
