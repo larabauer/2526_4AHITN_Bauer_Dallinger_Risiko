@@ -371,6 +371,9 @@ class Game:
                 self._end_combat()
 
     def _end_combat(self):
+        """Kampf beenden, zurück zu Angreifer-Auswahl."""
+        if self.active_combat.check_conquest():
+            self.active_combat.conquer(self.active_combat.attacker_dice_num)
         self.active_combat = None
         self.selected_attacker = None
         self.selected = None

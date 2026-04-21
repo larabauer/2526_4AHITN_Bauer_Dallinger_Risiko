@@ -24,8 +24,6 @@ class Combat:
         self.roll_attacker(num_dice_attacker)
         self.roll_defender()
         self.resolve_combat()
-        if self.check_conquest():
-            self.conquer(self.attacker_dice_num)
 
     def roll_dice(self, count: int) -> list[int]:
         return sorted([random.randint(1, 6) for _ in range(count)], reverse=True)
