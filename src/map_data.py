@@ -16,6 +16,14 @@ class MapData:
         return [country["name"] for country in cls.load()["countries"]]
 
     @classmethod
+    def get_country_neighbours(cls, country_name):
+        for country in cls.load()["countries"]:
+            if country["name"] == country_name:
+                return country["neighbors"]
+
+        return []
+
+    @classmethod
     def calculate_continent_bonus(cls, player_territory_names: list[str]) -> int:
         data = cls.load()
         bonus = 0
