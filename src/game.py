@@ -136,13 +136,18 @@ class Game:
             for t in self.territories:
                 if not t.contains(pos):
                     continue
-                if t.owner != current_index:
+                if t.owner != current_index and t.name in self.selected_attacker.neighbors:
                     max_dice           = min(Combat.MAX_ATTACKER_DICE, self.selected_attacker.troops - 1)
                     self.active_combat = Combat(self.selected_attacker, t, self.players)
                     self.pending_dice_count = max_dice
                     self.attack_subphase    = "combat_roll"
-                else:
-                    if t.troops >= 2:
+                elif t == self.selected_attacker:
+                    self.attack_subphase = "select_attacker"
+                    self.selected        = None
+                    self.selected_attacker = None
+                    break
+                elif t.owner == current_index:
+                    if t.troops >= 2 :
                         self.selected_attacker = t
                         self.selected          = t
                 break

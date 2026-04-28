@@ -7,6 +7,7 @@ class Player:
         self.color = color
         self.territories: list = []
         self.reinforcements: int = 0
+        self.life: bool = True
 
     def add_territory(self, territory) -> None:
         self.territories.append(territory)
