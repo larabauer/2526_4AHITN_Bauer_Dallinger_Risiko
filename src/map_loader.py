@@ -83,8 +83,12 @@ class MapLoader:
             if len(points) < 3:
                 continue
 
+
+            neighbors = MapData.get_country_neighbours(name)
+
             color = MapLoader.CONTINENT_COLORS.get(name, (180, 180, 180))
-            territories.append(Territory(name, points, color))
+            territories.append(Territory(name, points, color, neighbors))
+
 
         print(f"Territorien geladen: {len(territories)}")
         return territories

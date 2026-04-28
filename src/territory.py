@@ -35,10 +35,11 @@ def point_in_polygon(point: tuple, polygon: list) -> bool:
 
 
 class Territory:
-    def __init__(self, name: str, points: list, color: tuple):
+    def __init__(self, name: str, points: list, color: tuple, neighbors: list):
         self.name = name
         self.points = points
         self.color = color
+        self.neighbors = neighbors
         self.border_color = (30, 30, 30)
         self.owner: int | None = None
         self.troops: int = 1
