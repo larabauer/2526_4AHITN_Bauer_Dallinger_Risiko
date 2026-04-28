@@ -74,7 +74,7 @@ class Game:
 
     def _start_placement_phase(self) -> None:
         player = self.turn_manager.get_current_player()
-        player.calculate_reinforcements()  # ← kein map_data Argument mehr nötig
+        player.calculate_reinforcements()
         self.turn_manager.set_phase("placement")
         self.show_turn_overlay = True
 

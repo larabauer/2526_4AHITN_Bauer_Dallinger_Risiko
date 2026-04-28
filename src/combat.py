@@ -34,8 +34,10 @@ class Combat:
         return self.defending_territory.troops <= 0
 
     def conquer(self, troops_to_move: int) -> None:
-        self.defending_territory.owner = self.attacking_territory.owner
-        self.attacker.add_territory(self.defending_territory)
+        territory = self.defending_territory
+        self.defender.remove_territory(territory)
+        self.attacker.add_territory(territory)
+        territory.owner = self.attacking_territory.owner
         self.defending_territory.border_color = self.attacker.color
         self.defending_territory.troops = troops_to_move
         self.attacking_territory.troops -= troops_to_move
