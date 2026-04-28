@@ -486,7 +486,7 @@ class Game:
             self.screen.blit(d_txt, (bx + btn_w2 // 2 - d_txt.get_width() // 2,
                                      by + btn_h2 // 2 - d_txt.get_height() // 2))
 
-        self.combat_roll_rect = self._draw_button("WUERFELN!", card_x, card_y + 352, 720, (180, 35, 35), (230, 80, 80), font=self.font_large)
+        self.combat_roll_rect = self._draw_button("WUERFELN!", card_x, card_y + 352, 720, (180, 35, 35), (230, 80, 80), font=self.font)
 
     def _draw_combat_result_overlay(self) -> None:
         combat     = self.active_combat
