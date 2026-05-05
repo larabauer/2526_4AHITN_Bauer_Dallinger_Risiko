@@ -93,6 +93,8 @@ class Game:
 
     def _end_turn(self) -> None:
         self.turn_manager.next_player()
+        while not self.turn_manager.get_current_player().life:
+            self.turn_manager.next_player()
         self._start_placement_phase()
 
 
