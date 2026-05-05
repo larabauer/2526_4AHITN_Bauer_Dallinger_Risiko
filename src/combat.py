@@ -41,6 +41,8 @@ class Combat:
         self.defending_territory.border_color = self.attacker.color
         self.defending_territory.troops = troops_to_move
         self.attacking_territory.troops -= troops_to_move
+        if len(self.defender.territories) < 1:
+            self.defender.life = False
 
 
     @staticmethod
