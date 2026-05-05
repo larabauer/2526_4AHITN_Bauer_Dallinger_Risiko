@@ -133,6 +133,7 @@ class Game:
                 break
 
         elif phase == "attack" and self.attack_subphase == "select_defender":
+            self.selected_attacker.neighbors
             for t in self.territories:
                 if not t.contains(pos):
                     continue
@@ -249,16 +250,22 @@ class Game:
         self.screen.fill((30, 100, 160))
 
         for t in self.territories:
-            if t is self.selected_attacker and self.attack_subphase in (
-                "select_defender_intro", "select_defender", "combat_roll", "combat_result"
-            ):
-                valid = [(x, y) for x, y in t.points if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
-                if len(valid) >= 3:
-                    try:
-                        pygame.draw.polygon(self.screen, (255, 255, 100), valid, 5)
-                    except Exception:
-                        pass
             t.draw(self.screen, self.font)
+
+        # Angreifer gelb markieren
+        if self.selected_attacker and self.attack_subphase in (
+                "select_defender_intro", "select_defender", "combat_roll", "combat_result"
+        ):
+            valid = [(x, y) for x, y in self.selected_attacker.points if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
+            if len(valid) >= 3:
+                try:
+                    pygame.draw.polygon(self.screen, (255, 255, 100), valid, 5)
+                except Exception:
+                    pass
+
+        # Nachbar-Gegner rot/orange markieren
+        if self.attack_subphase == "select_defender":
+            self._draw_valid_defender_highlights()
 
         if self.selected:
             name   = self.selected.name.replace("_", " ").title()
@@ -625,3 +632,22 @@ class Game:
         self.screen.blit(txt, (btn_x + btn_w // 2 - txt.get_width() // 2,
                                btn_y + btn_h // 2 - txt.get_height() // 2))
         return rect
+
+    def _draw_valid_defender_highlights(self) -> None:
+        if not self.selected_attacker:
+            return
+
+        current_index = self.turn_manager.current_index
+
+        for t in self.territories:
+            is_enemy = t.owner != current_index
+            is_neighbor = t.name in self.selected_attacker.neighbors
+
+            if is_enemy and is_neighbor:
+                valid = [(x, y) for x, y in t.points if 0 <= x <= WIDTH and 0 <= y <= HEIGHT]
+                if len(valid) >= 3:
+                    try:
+                        pygame.draw.polygon(self.screen, (255, 80, 80), valid, 6)
+                        pygame.draw.polygon(self.screen, (255, 220, 120), valid, 2)
+                    except Exception:
+                        pass
